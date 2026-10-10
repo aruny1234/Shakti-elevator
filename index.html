@@ -704,10 +704,11 @@ const NAV=[
 ];
 const NAV_CUSTOMER=[
   ['home','🏠','Home'],
+  ['mylifts','🛗','My Lifts'],
   ['mycomplaints','🛠️','My Complaints'],
   ['myamc','📄','My AMC'],
 ];
-const CUSTOMER_ROUTES=['home','mycomplaints','myamc'];
+const CUSTOMER_ROUTES=['home','mylifts','mycomplaints','myamc'];
 function navVisible(id){
   if(id==='users'||id==='settings'||id==='import') return requireAdmin();
   if(id==='complaints') return session.role!=='engineer';   // engineers use "My Work" instead
@@ -716,6 +717,7 @@ function navVisible(id){
 }
 function navCounts(){
   if(isCustomer()) return {
+    mylifts:store.all('equipment').length,
     mycomplaints:store.all('complaints').filter(c=>!['Resolved','Closed'].includes(c.status)).length,
     myamc:store.all('amc').length };
   const c={
@@ -1998,7 +2000,7 @@ function complaintForm(opts){ opts=opts||{}; const cust=U.isCustomer();
     if(opts.customerId){const c=store.get('customers',opts.customerId);if(c){picker.value=c.name+' · '+c.code;}}
     g.append(field('Customer',el('div',{},picker,dl),{req:true,full:true})); }
   f.kind=selectEl([{v:'Complaint',t:'Complaint'},{v:'Enquiry',t:'Enquiry'}],'Complaint');
-  f.subject=el('input',{}); f.description=el('textarea',{rows:4});
+  f.subject=el('input',{value:opts.subject||''}); f.description=el('textarea',{rows:4});
   const att=attachmentPicker();
   g.append(field('Type',f.kind,{req:true}),field('Subject',f.subject,{req:true,full:true}),
     field('Details',f.description,{full:true}),field('Attach photos / PDF as proof',att,{full:true}));
@@ -2124,8 +2126,9 @@ VIEWS.home=function(view){
   view.append(pageHead('Welcome'+(c?', '+c.name:''),'Your elevator service portal',[
     el('button',{class:'btn',onclick:()=>complaintForm()},'＋ Raise complaint / enquiry')]));
   const open=store.all('complaints').filter(x=>!['Resolved','Closed'].includes(x.status));
-  const amcs=store.all('amc');
-  view.append(tileRow([['Open complaints',open.length,'var(--warn)'],['AMC contracts',amcs.length,'var(--brand)'],
+  const amcs=store.all('amc'); const lifts=store.all('equipment').length;
+  view.append(tileRow([['My lifts',lifts,'var(--brand)'],['Open complaints',open.length,'var(--warn)'],
+    ['AMC contracts',amcs.length,'var(--ok)'],
     ['Need your confirmation',amcs.filter(a=>amcSeverity(a)&&!a.custConfirmed).length,'var(--crit)']]));
   const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'Your recent items'));
   const rows=store.all('complaints').slice().sort((a,b)=>(b._c||'').localeCompare(a._c||'')).slice(0,6);
@@ -2136,6 +2139,26 @@ VIEWS.home=function(view){
     {key:'status',label:'Status',render:r=>badge(r.status,cStatusColor(r.status))},
     {key:'act',label:'',render:r=>el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();complaintDetail(r);}},'View')},
   ],rows,{empty:'No complaints yet — tap "Raise complaint / enquiry" above'})); view.append(p);
+};
+VIEWS.mylifts=function(view){
+  const eq=store.all('equipment');
+  view.append(pageHead('My Lifts',eq.length+' installed'));
+  if(!eq.length){ const p=el('div',{class:'panel'});
+    p.append(el('div',{class:'pb'},el('div',{class:'empty'},'No lift details on record yet. Please contact Shakti Elevator to have your lift(s) added to your account.')));
+    view.append(p); return; }
+  eq.forEach(e=>{ const p=el('div',{class:'panel'});
+    p.append(el('div',{class:'ph'},(e.make||'Lift')+(e.model?(' · '+e.model):'')+(e.type?('  —  '+e.type):'')));
+    const b=el('div',{class:'pb'});
+    const row=(k,v)=> v?el('div',{style:'display:flex;gap:8px;margin:3px 0'},
+      el('span',{style:'min-width:140px;color:var(--muted)'},k),el('span',{},String(v))):null;
+    [ row('Serial number',e.serial), row('Floors / stops',e.floors),
+      row('Installed',e.install?fmtD(e.install):''), row('Warranty till',e.warrantyEnd?fmtD(e.warrantyEnd):''),
+      row('Status',e.status), row('Notes',e.remarks) ].forEach(r=>r&&b.append(r));
+    b.append(el('div',{style:'margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'},
+      el('button',{class:'btn sec',onclick:()=>complaintForm({subject:'Issue with '+(e.make||'lift')+(e.serial?(' — '+e.serial):'')})},'🛠 Report an issue'),
+      el('a',{href:'#myamc',class:'btn sec'},'View AMC')));
+    p.append(b); view.append(p);
+  });
 };
 VIEWS.mycomplaints=function(view){
   const all=store.all('complaints').slice().sort((a,b)=>(b._c||'').localeCompare(a._c||''));
