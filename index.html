@@ -24,12 +24,12 @@
     Your data is protected by the Firestore security rules in SETUP, not by hiding this.)
 =========================================================================== */
 window.FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCdYhXb3nBHqzeQzIXqZJFq6Am5L25WuyM",
-  authDomain: "shakti-elevator-de4f9.firebaseapp.com",
-  projectId: "shakti-elevator-de4f9",
-  storageBucket: "shakti-elevator-de4f9.firebasestorage.app",
-  messagingSenderId: "1017583144955",
-  appId: "1:1017583144955:web:01a26e8be2af5cc3ad455e"
+  apiKey:            "PASTE_API_KEY",
+  authDomain:        "PASTE_PROJECT_ID.firebaseapp.com",
+  projectId:         "PASTE_PROJECT_ID",
+  storageBucket:     "PASTE_PROJECT_ID.appspot.com",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId:             "PASTE_APP_ID"
 };
 </script>
 <style>
@@ -314,7 +314,9 @@ function toast(msg,type=''){ const t=el('div',{class:'toast '+type},
    STORE  (relational tables over localStorage)  — the swappable seam
 ============================================================================ */
 const TABLES=['users','customers','contacts','visits','inquiries','followups',
-              'equipment','amc','alerts','notifications','documents','audit'];
+              'equipment','amc','alerts','notifications','documents','complaints','audit'];
+// Collections a customer may load, each filtered to their own customerId:
+const CUST_TABLES=['complaints','amc','equipment','contacts','visits','inquiries','followups'];
 let DB=null;            // in-memory cache — same shape the whole app already expects
 let fdb=null;           // Firestore instance (set in boot)
 
@@ -334,7 +336,19 @@ const store={
     DB.settings = meta.exists ? mergeSettings(meta.data()) : defaultSettings();
     const seq =await fdb.collection('meta').doc('seq').get();
     DB.seq = seq.exists ? (seq.data()||{}) : {};
-    for(const t of TABLES){
+    if(session && session.role==='customer'){        // sandboxed: only this customer's own records
+      const cid=session.customerId;
+      if(cid){
+        const cdoc=await fdb.collection('customers').doc(cid).get();
+        DB.customers = cdoc.exists ? [{...cdoc.data(), id:cdoc.id}] : [];
+        for(const t of CUST_TABLES){
+          try{ const snap=await fdb.collection(t).where('customerId','==',cid).get();
+            DB[t]=snap.docs.map(d=>({...d.data(), id:d.id})); }catch(e){ DB[t]=[]; }
+        }
+      }
+      return;
+    }
+    for(const t of TABLES){                          // staff: full collections
       const snap=await fdb.collection(t).get();
       DB[t]=snap.docs.map(d=>({...d.data(), id:d.id}));
     }
@@ -436,15 +450,22 @@ For {{company}}
 /* ============================================================================
    AUTH  +  session
 ============================================================================ */
-const ROLES={admin:'Admin',engineer:'Field Engineer',viewer:'Management / Viewer'};
+const ROLES={admin:'Admin',manager:'Manager',engineer:'Field Engineer',viewer:'Viewer',customer:'Customer'};
 const PERMS={
   admin:['*'],
-  engineer:['view','customer.add','customer.edit','visit.add','inquiry.add','inquiry.edit','followup.add','amc.view','notify','export'],
-  viewer:['view','export']
+  manager:['view','customer.add','customer.edit','visit.add','inquiry.add','inquiry.edit','followup.add',
+           'amc.view','amc.edit','complaint.view','complaint.assign','notify','export'],
+  engineer:['view','customer.add','customer.edit','visit.add','inquiry.add','inquiry.edit','followup.add',
+            'amc.view','complaint.view','notify','export'],
+  viewer:['view','export'],
+  customer:['portal']
 };
 let session=null, idleTimer=null;
 function can(p){ if(!session)return false; const list=PERMS[session.role]||[]; return list.includes('*')||list.includes(p); }
 function requireAdmin(){ return session&&session.role==='admin'; }
+function isStaff(){ return !!session && ['admin','manager','engineer','viewer'].includes(session.role); }
+function isManager(){ return !!session && (session.role==='admin'||session.role==='manager'); }  // can appoint engineers & handle confirmations
+function isCustomer(){ return !!session && session.role==='customer'; }
 
 /* Firebase Authentication. People sign in with email + password; their role
    (admin / engineer / viewer) lives in the Firestore users/{uid} document. */
@@ -470,13 +491,14 @@ async function loadProfile(fbUser){                       // resolve role from u
 
 /* Admin creates a new user via a SECONDARY Firebase app, so the admin's own
    session is untouched. Creates the Auth account + the users/{uid} profile doc. */
-async function adminCreateUser({name,email,pass,role}){
+async function adminCreateUser({name,email,pass,role,customerId}){
   if(!requireAdmin()) throw new Error('Admin only');
   if(!secondaryApp) secondaryApp=firebase.initializeApp(window.FIREBASE_CONFIG,'secondary');
   const secAuth=secondaryApp.auth();
   const cred=await secAuth.createUserWithEmailAndPassword(email.trim(),pass);
   const u=cred.user.uid;
   const row={id:u,name,email:email.trim(),role,status:'Active',_c:nowISO()};
+  if(customerId) row.customerId=customerId;             // links a customer login to its customer record
   await fdb.collection('users').doc(u).set(clean(row));
   if(!DB.users.some(x=>x.id===u)) DB.users.push(row);   // idempotent: realtime listener may have added it already
   audit('CREATE','users',u,null,email.trim());
@@ -662,12 +684,14 @@ const VIEWS={};                       // populated by app_views.js
 window.VIEWS=VIEWS; window.LCUtil={$,$$,el,esc,uid,todayISO,nowISO,parseD,fmtD,fmtDT,daysUntil,addDaysISO,inr,
   toast,store,can,session:()=>session,ROLES,PERMS,amcStatus,amcSeverity,runAlertScan,refreshBell,renderNotifPop,
   pushNotif,unreadCount,sendEmail,sendWhatsApp,renewalPDF,fillTemplate,amcCtx,debounce,sha256,openModal,closeModal,
-  navCounts,route,loadBuiltinData,adminCreateUser,sendReset,requireAdmin};
+  navCounts,route,loadBuiltinData,adminCreateUser,sendReset,requireAdmin,isStaff,isManager,isCustomer};
 
 const NAV=[
   ['dashboard','📊','Dashboard'],
   ['customers','👥','Customers'],
   ['visits','📍','Visits'],
+  ['complaints','🛠️','Complaints'],
+  ['mywork','🧰','My Work'],
   ['inquiries','📨','Inquiries'],
   ['followups','⏰','Follow-ups'],
   ['equipment','🛗','Equipment'],
@@ -678,16 +702,39 @@ const NAV=[
   ['settings','⚙️','Settings'],
   ['users','🔐','Users'],
 ];
-function navCounts(){ return {
-  customers:store.all('customers').length,
-  inquiries:store.all('inquiries').filter(i=>!['Won','Lost','Closed'].includes(i.status)).length,
-  followups:store.all('followups').filter(f=>f.status==='Open').length,
-  amc:store.all('amc').length,
-  alerts:store.all('amc').filter(a=>amcSeverity(a)).length,
-};}
+const NAV_CUSTOMER=[
+  ['home','🏠','Home'],
+  ['mycomplaints','🛠️','My Complaints'],
+  ['myamc','📄','My AMC'],
+];
+const CUSTOMER_ROUTES=['home','mycomplaints','myamc'];
+function navVisible(id){
+  if(id==='users'||id==='settings'||id==='import') return requireAdmin();
+  if(id==='complaints') return session.role!=='engineer';   // engineers use "My Work" instead
+  if(id==='mywork')     return session.role==='engineer';
+  return true;
+}
+function navCounts(){
+  if(isCustomer()) return {
+    mycomplaints:store.all('complaints').filter(c=>!['Resolved','Closed'].includes(c.status)).length,
+    myamc:store.all('amc').length };
+  const c={
+    customers:store.all('customers').length,
+    inquiries:store.all('inquiries').filter(i=>!['Won','Lost','Closed'].includes(i.status)).length,
+    followups:store.all('followups').filter(f=>f.status==='Open').length,
+    amc:store.all('amc').length,
+    alerts:store.all('amc').filter(a=>amcSeverity(a)).length,
+  };
+  if(session && session.role==='engineer')
+    c.mywork=store.all('complaints').filter(x=>x.assignedTo===session.id && !['Resolved','Closed'].includes(x.status)).length
+            +store.all('amc').filter(x=>x.renewalAssignedTo===session.id && x.renewalStatus!=='Done').length;
+  else if(session)
+    c.complaints=store.all('complaints').filter(x=>x.status==='New').length;
+  return c;
+}
 function buildNav(){ const nav=$('#nav'); nav.innerHTML=''; const counts=navCounts();
-  NAV.forEach(([id,ic,label])=>{
-    if((id==='users'||id==='settings'||id==='import')&&!requireAdmin())return;
+  (isCustomer()?NAV_CUSTOMER:NAV).forEach(([id,ic,label])=>{
+    if(!isCustomer() && !navVisible(id))return;
     const a=el('a',{href:'#'+id,'data-v':id},el('span',{class:'ic'},ic),el('span',{},label));
     if(counts[id]) a.append(el('span',{class:'cnt'},counts[id]));
     nav.append(a);
@@ -695,8 +742,11 @@ function buildNav(){ const nav=$('#nav'); nav.innerHTML=''; const counts=navCoun
 }
 function route(){ let hash=location.hash.slice(1)||'dashboard';
   const [name,arg]=hash.split('/');
+  // keep each audience inside its own area
+  if(isCustomer() && !CUSTOMER_ROUTES.includes(name)){ location.hash='#home'; return; }
+  if(!isCustomer() && CUSTOMER_ROUTES.includes(name)){ location.hash='#dashboard'; return; }
   $$('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.v===name));
-  const fn=VIEWS[name]||VIEWS.dashboard;
+  const fn=VIEWS[name]||(isCustomer()?VIEWS.home:VIEWS.dashboard);
   const view=$('#view'); view.innerHTML=''; window.scrollTo(0,0);
   try{ fn(view,arg); }catch(e){ console.error(e); view.append(el('div',{class:'empty'},'⚠ '+e.message)); }
   $('#side').classList.remove('open'); $('#scrim').classList.remove('open');
@@ -735,7 +785,7 @@ async function boot(){
       await firebase.auth().signOut(); $('#login').style.display='flex'; return; }
     if(prof.status && prof.status!=='Active'){ $('#lg-err').textContent='This account has been disabled.';
       await firebase.auth().signOut(); $('#login').style.display='flex'; return; }
-    session={id:prof.uid,uid:prof.uid,email:prof.email,role:prof.role||'viewer',name:prof.name||prof.email};
+    session={id:prof.uid,uid:prof.uid,email:prof.email,role:prof.role||'viewer',name:prof.name||prof.email,customerId:prof.customerId||''};
     try{ await store.load(); }catch(e){ console.error(e); toast('Could not load data — check Firestore rules','err'); }
     await seedSettingsIfNeeded();
     audit('LOGIN','users',session.id,'signed in',null);
@@ -749,13 +799,38 @@ async function seedSettingsIfNeeded(){
 }
 /* Live multi-user sync: when anyone changes data, every signed-in device updates. */
 let syncT=null;
+let _seenComplaint=0, _seenConfirm=0;   // for "pop-up" alerts to staff
 function startRealtimeSync(){
+  if(session && session.role==='customer'){            // customer: only their own complaints & AMCs live-update
+    const cid=session.customerId; if(!cid) return;
+    ['complaints','amc'].forEach(t=>{
+      fdb.collection(t).where('customerId','==',cid).onSnapshot(
+        snap=>{ DB[t]=snap.docs.map(d=>({...d.data(),id:d.id})); scheduleSyncRender(); },
+        err=>console.warn('sync '+t+':',err.message));
+    });
+    return;
+  }
+  // staff: everything live. Seed "last seen" markers so we only alert on genuinely new activity.
+  _seenComplaint=Math.max(0,...store.all('complaints').map(c=>Date.parse(c._c)||0));
+  _seenConfirm  =Math.max(0,...store.all('amc').map(a=>Date.parse(a.custConfirmedAt)||0));
   TABLES.filter(t=>t!=='audit').forEach(t=>{
-    fdb.collection(t).onSnapshot(snap=>{ DB[t]=snap.docs.map(d=>({...d.data(),id:d.id})); scheduleSyncRender(); },
-      err=>console.warn('sync '+t+':',err.message));
+    fdb.collection(t).onSnapshot(snap=>{
+      DB[t]=snap.docs.map(d=>({...d.data(),id:d.id}));
+      if(t==='complaints') watchNewComplaints();
+      if(t==='amc') watchNewConfirmations();
+      scheduleSyncRender();
+    }, err=>console.warn('sync '+t+':',err.message));
   });
   fdb.collection('meta').doc('settings').onSnapshot(d=>{ if(d.exists) DB.settings=mergeSettings(d.data()); });
 }
+function watchNewComplaints(){ if(!isStaff())return;
+  const newest=Math.max(0,...store.all('complaints').map(c=>Date.parse(c._c)||0));
+  if(newest>_seenComplaint){ const c=store.all('complaints').find(x=>Date.parse(x._c)===newest);
+    _seenComplaint=newest; if(c) toast('🛠️ New '+(c.kind||'complaint').toLowerCase()+' '+c.code+(c.customerName?' — '+c.customerName:''),'info'); } }
+function watchNewConfirmations(){ if(!isManager())return;
+  const newest=Math.max(0,...store.all('amc').map(a=>Date.parse(a.custConfirmedAt)||0));
+  if(newest>_seenConfirm){ const a=store.all('amc').find(x=>Date.parse(x.custConfirmedAt)===newest);
+    _seenConfirm=newest; if(a){ const c=store.get('customers',a.customerId); toast('✅ AMC renewal confirmed by '+(c?c.name:'customer')+' ('+a.code+')','ok'); } } }
 function scheduleSyncRender(){ clearTimeout(syncT); syncT=setTimeout(()=>{
   if(!session) return;
   if($('#modalBg').classList.contains('open')) return;                 // don't wipe an open form/modal
@@ -767,8 +842,11 @@ function scheduleSyncRender(){ clearTimeout(syncT); syncT=setTimeout(()=>{
 function enterApp(){
   $('#login').style.display='none'; $('#app').style.display='block';
   $('#uName').textContent=session.name; $('#uAv').textContent=(session.name||'?')[0].toUpperCase();
-  buildNav(); runAlertScan(); refreshBell(); resetIdle();
-  if(!location.hash) location.hash='#dashboard'; else route();
+  const cust=isCustomer();
+  $('#fab').style.display=cust?'none':'';                 // "New Visit" is staff-only
+  buildNav(); if(!cust) runAlertScan(); refreshBell(); resetIdle();
+  const home=cust?'#home':'#dashboard';
+  if(!location.hash) location.hash=home; else route();
 }
 function wireLogin(){
   const go=async()=>{ const u=$('#lg-user').value,p=$('#lg-pass').value; $('#lg-err').textContent='';
@@ -1032,6 +1110,8 @@ VIEWS.customers=function(view,arg){
       {key:'amc',label:'AMC',render:r=>{const a=store.where('amc',x=>x.customerId===r.id);
         if(!a.length)return badge('None','bg-mut'); const sev=a.map(amcSeverity).filter(Boolean);
         return sev.length?badge(sev.some(s=>s.k==='crit')?'⚠ Expired':'Due','sev'&&(sev.some(s=>s.k==='crit')?'bg-crit':'bg-warn')):badge('Active','bg-ok');}},
+      ...(U.requireAdmin()?[{key:'portal',label:'Portal',render:r=>{ const u=store.all('users').find(x=>x.role==='customer'&&x.customerId===r.id);
+        return el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();createPortalLogin(r);}}, u?'🔑 Login':'🔑 Create'); }}]:[]),
     ],rows,{onRow:r=>location.hash='#c360/'+r.id}));
   }
   [qi,typeF,empF].forEach(i=>i.addEventListener('input',draw)); draw();
@@ -1144,7 +1224,21 @@ VIEWS.visitForm=function(preCustId){
   // photo + gps
   const photoInp=el('input',{type:'file',accept:'image/*',capture:'environment'});
   let photoData=''; photoInp.addEventListener('change',()=>{const file=photoInp.files[0];if(!file)return;
-    const r=new FileReader();r.onload=()=>{photoData=r.result;toast('Photo attached','ok');};r.readAsDataURL(file);});
+    const r=new FileReader();
+    r.onload=()=>{ const img=new Image();
+      img.onload=()=>{ try{
+          const max=1024; let w=img.width||max, h=img.height||max;        // downscale: longest side ≤ 1024px
+          if(w>=h && w>max){ h=Math.round(h*max/w); w=max; } else if(h>w && h>max){ w=Math.round(w*max/h); h=max; }
+          const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+          const ctx=cv.getContext('2d'); if(!ctx){ photoData=r.result; toast('Photo attached','ok'); return; }
+          ctx.drawImage(img,0,0,w,h);
+          photoData=cv.toDataURL('image/jpeg',0.7);                        // compress → keeps doc well under Firestore's 1MB limit
+          toast('Photo attached ('+Math.round(photoData.length/1024)+' KB)','ok');
+        }catch(e){ photoData=r.result; toast('Photo attached','ok'); } };
+      img.onerror=()=>toast('Could not read that image','err');
+      img.src=r.result; };
+    r.onerror=()=>toast('Could not read file','err');
+    r.readAsDataURL(file); });
   add('photo','Photo Attachment',photoInp);
   const gpsBox=el('div',{class:'map-preview'},'Location not captured'); let lat='',lng='';
   const gpsBtn=el('button',{class:'btn sec sm',type:'button',onclick:()=>{ if(!navigator.geolocation){toast('Geolocation unavailable','err');return;}
@@ -1853,6 +1947,250 @@ async function openUserForm(u){ const g=el('div',{class:'form-grid'}); const f={
   if(isNew) openModalNote(g,'The new user can sign in right away with this email and password. Ask them to change it after first login via "Forgot password?".');
 }
 function openModalNote(container,text){ container.append(el('p',{class:'small',style:'grid-column:1/-1;color:var(--muted);margin-top:4px'},text)); }
+
+/* ============================================================================
+   COMPLAINTS, ENQUIRIES, ASSIGNMENT  +  CUSTOMER PORTAL
+============================================================================ */
+function cStatusColor(s){ return s==='New'?'bg-warn':(s==='Resolved'||s==='Closed')?'bg-ok':'bg-info'; }
+function tileRow(items){ const r=el('div',{style:'display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px'});
+  items.forEach(([t,v,c])=>r.append(el('div',{class:'panel',style:'flex:1;min-width:150px;border-left:4px solid '+(c||'var(--brand)')},
+    el('div',{class:'pb'},el('div',{class:'small',style:'color:var(--muted)'},t),el('div',{style:'font-size:26px;font-weight:800'},String(v)))))); return r; }
+
+/* Attachment picker — compresses images in-browser, accepts small PDFs, caps total size
+   so the complaint document stays under Firestore's 1 MB limit. */
+function attachmentPicker(){
+  const wrap=el('div',{}); const list=[];
+  const listEl=el('div',{class:'small',style:'margin:6px 0'});
+  function redraw(){ listEl.innerHTML=''; if(!list.length){listEl.append(el('span',{style:'color:var(--muted)'},'No files attached'));return;}
+    list.forEach((a,i)=>listEl.append(el('div',{style:'display:flex;gap:8px;align-items:center;margin:2px 0'},
+      el('span',{},(a.type==='image'?'🖼 ':'📎 ')+a.name+' ('+Math.round(a.data.length/1024)+' KB)'),
+      el('button',{class:'btn xs sec',onclick:()=>{list.splice(i,1);redraw();}},'Remove')))); }
+  const inp=el('input',{type:'file',accept:'image/*,application/pdf',multiple:true});
+  inp.addEventListener('change',()=>{ const files=[...inp.files]; inp.value='';
+    files.forEach(file=>{ if(list.length>=4){toast('Up to 4 files','warn');return;}
+      const r=new FileReader();
+      if(file.type&&file.type.indexOf('image/')===0){
+        r.onload=()=>{ const img=new Image(); img.onload=()=>{ try{
+            const max=1024; let w=img.width||max,h=img.height||max;
+            if(w>=h&&w>max){h=Math.round(h*max/w);w=max;}else if(h>w&&h>max){w=Math.round(w*max/h);h=max;}
+            const cv=document.createElement('canvas');cv.width=w;cv.height=h;const ctx=cv.getContext('2d');
+            const data=ctx?(ctx.drawImage(img,0,0,w,h),cv.toDataURL('image/jpeg',0.7)):r.result;
+            list.push({name:file.name,type:'image',data});redraw();
+          }catch(e){ list.push({name:file.name,type:'image',data:r.result});redraw(); } };
+          img.onerror=()=>toast('Could not read that image','err'); img.src=r.result; };
+        r.readAsDataURL(file);
+      } else if(file.type==='application/pdf'){
+        r.onload=()=>{ if(r.result.length>750*1024){toast(file.name+' is too large (keep PDFs under ~550 KB)','err');return;}
+          list.push({name:file.name,type:'pdf',data:r.result});redraw(); };
+        r.readAsDataURL(file);
+      } else toast('Only images or PDF files','warn');
+    }); });
+  wrap.append(inp,listEl); redraw(); wrap.getData=()=>list.slice(); return wrap;
+}
+
+/* Raise / log a complaint or enquiry (used by customers and staff). */
+function complaintForm(opts){ opts=opts||{}; const cust=U.isCustomer();
+  const g=el('div',{class:'form-grid'}); const f={}; let selCustId=opts.customerId||(cust?session().customerId:'');
+  if(!cust){ const picker=el('input',{placeholder:'Type customer name…'});
+    const dl=el('datalist',{id:'cmpCustDL'}); store.all('customers').forEach(c=>dl.append(el('option',{value:c.name+' · '+c.code})));
+    picker.setAttribute('list','cmpCustDL');
+    picker.addEventListener('change',()=>{const m=store.all('customers').find(c=>(c.name+' · '+c.code)===picker.value);selCustId=m?m.id:'';});
+    if(opts.customerId){const c=store.get('customers',opts.customerId);if(c){picker.value=c.name+' · '+c.code;}}
+    g.append(field('Customer',el('div',{},picker,dl),{req:true,full:true})); }
+  f.kind=selectEl([{v:'Complaint',t:'Complaint'},{v:'Enquiry',t:'Enquiry'}],'Complaint');
+  f.subject=el('input',{}); f.description=el('textarea',{rows:4});
+  const att=attachmentPicker();
+  g.append(field('Type',f.kind,{req:true}),field('Subject',f.subject,{req:true,full:true}),
+    field('Details',f.description,{full:true}),field('Attach photos / PDF as proof',att,{full:true}));
+  const save=el('button',{class:'btn',onclick:()=>{
+    const cid=cust?session().customerId:selCustId;
+    if(!cid){toast('Select a customer','err');return;}
+    if(!f.subject.value.trim()){toast('Subject is required','err');return;}
+    const files=att.getData(); const total=files.reduce((s,a)=>s+a.data.length,0);
+    if(total>950*1024){toast('Attachments too large — remove one or use smaller files','err');return;}
+    const c=store.get('customers',cid);
+    const rec={code:store.code('CMP'),customerId:cid,customerName:c?c.name:'',
+      kind:f.kind.value,subject:f.subject.value.trim(),description:f.description.value.trim(),
+      attachments:files,status:'New',assignedTo:'',assignedToName:'',
+      createdByRole:session().role,createdByName:session().name,
+      history:[{ts:nowISO(),by:session().name,action:'Created ('+f.kind.value+')'}]};
+    store.insert('complaints',rec);
+    toast(f.kind.value+' '+rec.code+' submitted','ok'); closeModal(); buildNavSafe(); route();
+  }},'Submit');
+  openModal(cust?'Raise a complaint / enquiry':'Log complaint / enquiry',g,
+    [el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save],true);
+}
+
+function complaintDetail(c){ const b=el('div',{});
+  b.append(el('p',{},el('b',{},c.code+' · '+c.kind+'  '),badge(c.status,cStatusColor(c.status))));
+  b.append(el('p',{class:'small',style:'color:var(--muted)'},'Customer: '+(c.customerName||'—')+' · Raised '+fmtDT(c._c)+(c.assignedToName?(' · Assigned to '+c.assignedToName):'')));
+  b.append(el('p',{},el('b',{},'Subject: '),c.subject||'—'));
+  if(c.description) b.append(el('p',{},c.description));
+  if(c.attachments&&c.attachments.length){ const ag=el('div',{style:'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0'});
+    c.attachments.forEach(a=>{ if(a.type==='image') ag.append(el('img',{src:a.data,style:'max-width:140px;max-height:140px;border-radius:8px;border:1px solid var(--line)'}));
+      else ag.append(el('a',{href:a.data,download:a.name,class:'btn xs sec'},'📎 '+a.name)); });
+    b.append(el('div',{},el('div',{class:'small',style:'color:var(--muted)'},'Attachments'),ag)); }
+  if(c.history&&c.history.length){ const h=el('div',{class:'small',style:'margin-top:8px'});
+    h.append(el('div',{style:'color:var(--muted)'},'History'));
+    c.history.slice().reverse().forEach(e=>h.append(el('div',{},'• '+fmtDT(e.ts)+' — '+e.by+': '+e.action))); b.append(h); }
+  const foot=[el('button',{class:'btn sec',onclick:closeModal},'Close')];
+  if(U.isManager()) foot.push(el('button',{class:'btn',onclick:()=>{closeModal();assignComplaint(c);}},'Assign / Update'));
+  openModal('Complaint '+c.code,b,foot,true);
+}
+
+function assignComplaint(c){
+  const engs=store.all('users').filter(u=>['engineer','manager','admin'].includes(u.role)&&(u.status||'Active')==='Active');
+  const sel=selectEl(engs.map(e=>({v:e.id,t:e.name+' ('+ROLES[e.role]+')'})),c.assignedTo||'',{placeholder:'Select engineer…'});
+  const st=selectEl(['New','Assigned','In Progress','Resolved','Closed'],c.status||'New');
+  const note=el('textarea',{rows:2,placeholder:'Note (optional)'});
+  const g=el('div',{class:'form-grid'});
+  g.append(field('Assign to',sel,{req:true}),field('Status',st),field('Note',note,{full:true}));
+  const save=el('button',{class:'btn',onclick:()=>{ const eng=store.get('users',sel.value);
+    const hist=(c.history||[]).concat([{ts:nowISO(),by:session().name,action:(eng?'Assigned to '+eng.name:'Updated')+' · '+st.value+(note.value?' — '+note.value:'')}]);
+    store.update('complaints',c.id,{assignedTo:sel.value||'',assignedToName:eng?eng.name:'',status:(sel.value&&st.value==='New')?'Assigned':st.value,history:hist});
+    toast('Complaint updated','ok'); closeModal(); route();
+  }},'Save');
+  openModal('Assign — '+c.code,g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save]);
+}
+
+/* ---- staff: all complaints ---- */
+VIEWS.complaints=function(view){
+  if(session().role==='engineer'){ location.hash='#mywork'; return; }
+  const all=store.all('complaints').slice().sort((a,b)=>(b._c||'').localeCompare(a._c||''));
+  view.append(pageHead('Complaints & Enquiries',all.length+' total · '+all.filter(c=>c.status==='New').length+' new',[
+    can('complaint.view')?el('button',{class:'btn',onclick:()=>complaintForm()},'＋ Log complaint'):null,
+    exportBtns('Complaints',()=>all,[{key:'code',label:'No.'},{key:'customerName',label:'Customer'},{key:'kind',label:'Type'},{key:'subject',label:'Subject'},{key:'status',label:'Status'},{key:'assignedToName',label:'Assigned'}])]));
+  const bar=el('div',{class:'panel'}); const pb=el('div',{class:'pb filters'});
+  const sf=selectEl(['New','Assigned','In Progress','Resolved','Closed'],'',{placeholder:'All statuses'});
+  const kf=selectEl(['Complaint','Enquiry'],'',{placeholder:'All types'});
+  pb.append(field('Status',sf),field('Type',kf)); bar.append(pb); view.append(bar);
+  const panel=el('div',{class:'panel'}); view.append(panel);
+  function draw(){ panel.innerHTML=''; let rows=all;
+    if(sf.value)rows=rows.filter(r=>r.status===sf.value); if(kf.value)rows=rows.filter(r=>r.kind===kf.value);
+    panel.append(el('div',{class:'ph'},'Results ('+rows.length+')'));
+    panel.append(dataTable([
+      {key:'code',label:'No.',render:r=>el('b',{},r.code)},
+      {key:'customerName',label:'Customer'},
+      {key:'kind',label:'Type',render:r=>badge(r.kind,'bg-mut')},
+      {key:'subject',label:'Subject'},
+      {key:'status',label:'Status',render:r=>badge(r.status,cStatusColor(r.status))},
+      {key:'assignedToName',label:'Assigned',render:r=>r.assignedToName||badge('Unassigned','bg-warn')},
+      {key:'when',label:'Raised',render:r=>fmtDT(r._c)},
+      {key:'act',label:'',render:r=>el('div',{style:'display:flex;gap:5px'},
+        el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();complaintDetail(r);}},'View'),
+        can('complaint.assign')?el('button',{class:'btn xs',onclick:e=>{e.stopPropagation();assignComplaint(r);}},'Assign'):null)},
+    ],rows,{empty:'No complaints yet'}));
+  }
+  [sf,kf].forEach(i=>i.addEventListener('input',draw)); draw();
+};
+
+/* ---- engineer: my assigned work ---- */
+function engUpdate(c){
+  const st=selectEl(['Assigned','In Progress','Resolved','Closed'],c.status==='New'?'In Progress':c.status);
+  const note=el('textarea',{rows:2,placeholder:'What did you do?'});
+  const g=el('div',{class:'form-grid'}); g.append(field('Status',st),field('Note',note,{full:true}));
+  const save=el('button',{class:'btn',onclick:()=>{ const hist=(c.history||[]).concat([{ts:nowISO(),by:session().name,action:st.value+(note.value?' — '+note.value:'')}]);
+    store.update('complaints',c.id,{status:st.value,history:hist}); toast('Updated','ok'); closeModal(); route();
+  }},'Save');
+  openModal('Update '+c.code,g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save]);
+}
+VIEWS.mywork=function(view){
+  const mine=store.all('complaints').filter(c=>c.assignedTo===session().id).sort((a,b)=>(b._c||'').localeCompare(a._c||''));
+  const amcMine=store.all('amc').filter(a=>a.renewalAssignedTo===session().id && a.renewalStatus!=='Done');
+  view.append(pageHead('My Work',mine.length+' complaints · '+amcMine.length+' renewals'));
+  const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'Assigned complaints'));
+  p.append(dataTable([
+    {key:'code',label:'No.',render:r=>el('b',{},r.code)},
+    {key:'customerName',label:'Customer'},
+    {key:'kind',label:'Type',render:r=>badge(r.kind,'bg-mut')},
+    {key:'subject',label:'Subject'},
+    {key:'status',label:'Status',render:r=>badge(r.status,cStatusColor(r.status))},
+    {key:'act',label:'',render:r=>el('div',{style:'display:flex;gap:5px'},
+      el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();complaintDetail(r);}},'View'),
+      el('button',{class:'btn xs',onclick:e=>{e.stopPropagation();engUpdate(r);}},'Update'))},
+  ],mine,{empty:'Nothing assigned to you yet'})); view.append(p);
+  if(amcMine.length){ const a=el('div',{class:'panel'}); a.append(el('div',{class:'ph'},'Assigned AMC renewals'));
+    a.append(dataTable([
+      {key:'code',label:'AMC',render:r=>el('b',{},r.code)},
+      {key:'cust',label:'Customer',render:r=>{const c=store.get('customers',r.customerId);return c?c.name:'—';}},
+      {key:'endDate',label:'Expiry',render:r=>fmtD(r.endDate)},
+      {key:'act',label:'',render:r=>el('button',{class:'btn xs',onclick:e=>{e.stopPropagation();store.update('amc',r.id,{renewalStatus:'Done'});toast('Marked done','ok');route();}},'Mark done')},
+    ],amcMine)); view.append(a); }
+};
+
+/* ---- customer portal ---- */
+VIEWS.home=function(view){
+  const c=store.all('customers')[0];
+  view.append(pageHead('Welcome'+(c?', '+c.name:''),'Your elevator service portal',[
+    el('button',{class:'btn',onclick:()=>complaintForm()},'＋ Raise complaint / enquiry')]));
+  const open=store.all('complaints').filter(x=>!['Resolved','Closed'].includes(x.status));
+  const amcs=store.all('amc');
+  view.append(tileRow([['Open complaints',open.length,'var(--warn)'],['AMC contracts',amcs.length,'var(--brand)'],
+    ['Need your confirmation',amcs.filter(a=>amcSeverity(a)&&!a.custConfirmed).length,'var(--crit)']]));
+  const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'Your recent items'));
+  const rows=store.all('complaints').slice().sort((a,b)=>(b._c||'').localeCompare(a._c||'')).slice(0,6);
+  p.append(dataTable([
+    {key:'code',label:'No.',render:r=>el('b',{},r.code)},
+    {key:'kind',label:'Type',render:r=>badge(r.kind,'bg-mut')},
+    {key:'subject',label:'Subject'},
+    {key:'status',label:'Status',render:r=>badge(r.status,cStatusColor(r.status))},
+    {key:'act',label:'',render:r=>el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();complaintDetail(r);}},'View')},
+  ],rows,{empty:'No complaints yet — tap "Raise complaint / enquiry" above'})); view.append(p);
+};
+VIEWS.mycomplaints=function(view){
+  const all=store.all('complaints').slice().sort((a,b)=>(b._c||'').localeCompare(a._c||''));
+  view.append(pageHead('My Complaints & Enquiries',all.length+' total',[
+    el('button',{class:'btn',onclick:()=>complaintForm()},'＋ Raise new')]));
+  const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'All items'));
+  p.append(dataTable([
+    {key:'code',label:'No.',render:r=>el('b',{},r.code)},
+    {key:'kind',label:'Type',render:r=>badge(r.kind,'bg-mut')},
+    {key:'subject',label:'Subject'},
+    {key:'status',label:'Status',render:r=>badge(r.status,cStatusColor(r.status))},
+    {key:'assignedToName',label:'Engineer',render:r=>r.assignedToName||'—'},
+    {key:'when',label:'Raised',render:r=>fmtDT(r._c)},
+    {key:'act',label:'',render:r=>el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();complaintDetail(r);}},'View')},
+  ],all,{empty:'Nothing yet'})); view.append(p);
+};
+VIEWS.myamc=function(view){
+  const amcs=store.all('amc');
+  view.append(pageHead('My AMC Contracts',amcs.length+' total'));
+  const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'Your contracts'));
+  p.append(dataTable([
+    {key:'code',label:'AMC',render:r=>el('b',{},r.code)},
+    {key:'equipment',label:'Equipment',render:r=>r.equipment||'Elevator'},
+    {key:'endDate',label:'Valid till',render:r=>fmtD(r.endDate)},
+    {key:'status',label:'Status',render:r=>{const s=amcStatus(r);return badge(s,s==='Expired'?'bg-crit':s==='Expiring Soon'?'bg-warn':'bg-ok');}},
+    {key:'confirm',label:'Renewal',render:r=>{ if(r.custConfirmed)return badge('✓ Confirmed','bg-ok');
+      return el('button',{class:'btn xs',onclick:e=>{e.stopPropagation();
+        if(confirm('Confirm you want to renew AMC '+r.code+'? Our team will be notified and will contact you to arrange it.')){
+          store.update('amc',r.id,{custConfirmed:true,custConfirmedAt:nowISO()});
+          toast('Renewal confirmed — our team has been notified','ok'); route(); }}},'Confirm renewal'); }},
+  ],amcs,{empty:'No AMC contracts on record yet'})); view.append(p);
+};
+
+/* ---- admin: create / manage a customer's portal login ---- */
+function createPortalLogin(cust){
+  const existing=store.all('users').find(u=>u.role==='customer'&&u.customerId===cust.id);
+  if(existing){ const b=el('div',{});
+    b.append(el('p',{},'Portal login for ',el('b',{},cust.name),': ',el('b',{},existing.email),'  ',badge(existing.status||'Active',(existing.status||'Active')==='Active'?'bg-ok':'bg-mut')));
+    b.append(el('p',{class:'small',style:'color:var(--muted)'},'Manage this account (disable, reset) on the Users screen.'));
+    openModal('Portal login — '+cust.name,b,[el('button',{class:'btn sec',onclick:closeModal},'Close'),
+      el('button',{class:'btn',onclick:()=>{U.sendReset(existing.email);}},'Send password reset')]); return; }
+  const g=el('div',{class:'form-grid'}); const f={};
+  f.email=el('input',{type:'email',value:cust.email||''}); f.pass=el('input',{type:'text',placeholder:'At least 6 characters'});
+  g.append(field('Login email',f.email,{req:true}),field('Temporary password',f.pass,{req:true}));
+  const save=el('button',{class:'btn',onclick:async()=>{
+    if(!f.email.value.trim()){toast('Email required','err');return;}
+    if(!f.pass.value||f.pass.value.length<6){toast('Password must be at least 6 characters','err');return;}
+    save.disabled=true; save.textContent='Creating…';
+    try{ await U.adminCreateUser({name:cust.name,email:f.email.value,pass:f.pass.value,role:'customer',customerId:cust.id});
+      toast('Portal login created for '+cust.name,'ok'); closeModal(); route(); }
+    catch(e){ save.disabled=false; save.textContent='Create login'; toast(e.message||'Could not create login','err'); }
+  }},'Create login');
+  openModal('Create portal login — '+cust.name,g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save]);
+  openModalNote(g,'Share the email and temporary password with the customer. They sign in at the same web address and see only their own complaints and AMCs.');
+}
 
 })();
 
