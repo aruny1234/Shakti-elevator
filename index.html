@@ -372,7 +372,17 @@ const store={
     if(t!=='audit') audit('DELETE',t,id,r?.code||r?.name||id,null); },
   settings(){ return DB.settings; },
   saveSettings(s){ DB.settings=s; fdb.collection('meta').doc('settings').set(clean(s)).catch(fsErr); },
-  export(){ return JSON.stringify(DB,null,2); }
+  export(){ return JSON.stringify(DB,null,2); },
+  resetSeq(){ DB.seq={}; return fdb.collection('meta').doc('seq').set({}).catch(fsErr); },   // next codes start at 0001
+  async clearData(onProgress){                      // wipe all business records; keeps users, settings
+    const cols=['customers','contacts','visits','inquiries','followups','equipment','amc','alerts','notifications','documents','complaints'];
+    let done=0, total=cols.reduce((s,t)=>s+(DB[t]||[]).length,0);
+    for(const t of cols){ const ids=(DB[t]||[]).map(r=>r.id);
+      for(const id of ids){ try{ await fdb.collection(t).doc(id).delete(); }catch(e){} done++; if(onProgress&&done%10===0)onProgress(done,total); }
+      DB[t]=[]; }
+    DB.seq={}; try{ await fdb.collection('meta').doc('seq').set({}); }catch(e){}
+    if(onProgress)onProgress(total,total); return total;
+  }
 };
 function mergeSettings(s){ const d=defaultSettings(); return {...d,...s,
   company:{...d.company,...(s.company||{})}, masters:{...d.masters,...(s.masters||{})},
@@ -1112,8 +1122,12 @@ VIEWS.customers=function(view,arg){
       {key:'amc',label:'AMC',render:r=>{const a=store.where('amc',x=>x.customerId===r.id);
         if(!a.length)return badge('None','bg-mut'); const sev=a.map(amcSeverity).filter(Boolean);
         return sev.length?badge(sev.some(s=>s.k==='crit')?'⚠ Expired':'Due','sev'&&(sev.some(s=>s.k==='crit')?'bg-crit':'bg-warn')):badge('Active','bg-ok');}},
-      ...(U.requireAdmin()?[{key:'portal',label:'Portal',render:r=>{ const u=store.all('users').find(x=>x.role==='customer'&&x.customerId===r.id);
-        return el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();createPortalLogin(r);}}, u?'🔑 Login':'🔑 Create'); }}]:[]),
+      ...(U.requireAdmin()?[{key:'portal',label:'Portal / Manage',render:r=>{ const u=store.all('users').find(x=>x.role==='customer'&&x.customerId===r.id);
+        return el('div',{style:'display:flex;gap:5px'},
+          el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();createPortalLogin(r);}}, u?'🔑 Login':'🔑 Create'),
+          el('button',{class:'btn xs danger',onclick:e=>{e.stopPropagation();
+            const n=['equipment','visits','inquiries','followups','amc','complaints','contacts'].reduce((s,t)=>s+store.all(t).filter(x=>x.customerId===r.id).length,0);
+            if(confirm('Delete customer "'+r.name+'" and all '+n+' linked records (lifts, visits, inquiries, AMCs, complaints)?\n\nThis cannot be undone. Use this to remove a duplicate.')){ deleteCustomerCascade(r); toast('Customer and linked records deleted','ok'); buildNavSafe(); draw(); }}},'Delete')); }}]:[]),
     ],rows,{onRow:r=>location.hash='#c360/'+r.id}));
   }
   [qi,typeF,empF].forEach(i=>i.addEventListener('input',draw)); draw();
@@ -1427,7 +1441,10 @@ VIEWS.equipment=function(view){
     {key:'serial',label:'Serial'},{key:'floors',label:'Floors'},
     {key:'newLift',label:'New Lift',render:r=>r.newLift?badge('New','bg-hi'):'—'},
     {key:'status',label:'Status',render:r=>badge(r.status||'—','bg-ok')},
-    {key:'act',label:'',render:r=>can('customer.edit')?el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();openEquipForm(r);}},'Edit'):''},
+    {key:'act',label:'',render:r=>el('div',{style:'display:flex;gap:5px'},
+      can('customer.edit')?el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();openEquipForm(r);}},'Edit'):null,
+      U.requireAdmin()?el('button',{class:'btn xs danger',onclick:e=>{e.stopPropagation();
+        if(confirm('Delete this equipment ('+(r.make||r.code||'lift')+')? This cannot be undone.')){store.remove('equipment',r.id);toast('Equipment deleted','ok');route();}}},'Delete'):null)},
   ],store.all('equipment'),{onRow:r=>location.hash='#c360/'+r.customerId}));
 };
 const EQ_COLS=[{key:'code',label:'Equipment ID'},{key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},
@@ -1875,6 +1892,25 @@ VIEWS.settings=function(view){
       const a=el('a',{href:URL.createObjectURL(blob),download:'shakti_elevator_backup_'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();toast('Backup exported','ok');}},'⬇ Backup (JSON)'),
     el('button',{class:'btn sec',onclick:()=>location.reload()},'🔄 Reload from cloud'));
   view.append(saveBar);
+
+  // ---- Danger zone (admin only): ID numbering & data reset ----
+  if(U.requireAdmin()){
+    const dz=el('div',{class:'panel',style:'border:1px solid var(--crit)'});
+    dz.append(el('div',{class:'ph',style:'color:var(--crit)'},'Danger zone'));
+    const db=el('div',{class:'pb'});
+    db.append(el('p',{class:'small',style:'color:var(--muted)'},'Reset numbering makes the next records start at 0001. It only produces a clean 1-2-3 sequence when the records are empty — so reset while starting fresh, then import. "Clear all records" wipes customers, lifts, visits, inquiries, AMCs and complaints (your login and settings are kept) and resets numbering, so a fresh import is numbered from 1.'));
+    db.append(el('div',{style:'display:flex;gap:10px;flex-wrap:wrap'},
+      el('button',{class:'btn sec',onclick:()=>{ if(confirm('Reset all ID numbering so the next records start at 0001?\\n\\nDo this only when records are empty (right before a fresh import), otherwise new codes may clash with existing ones.')){ store.resetSeq(); toast('Numbering reset — next records start at 0001','ok'); } }},'🔢 Reset ID numbering'),
+      el('button',{class:'btn danger',onclick:async(e)=>{
+        const n=['customers','equipment','visits','inquiries','followups','amc','complaints','contacts'].reduce((s,t)=>s+store.all(t).length,0);
+        if(!confirm('Delete ALL '+n+' records (customers, lifts, visits, inquiries, AMCs, complaints) and reset numbering to 1?\\n\\nYour login and settings are kept. This cannot be undone — export a backup first if unsure.')) return;
+        const btn=e.target; btn.disabled=true; btn.textContent='Clearing…';
+        const total=await store.clearData((d,t)=>{ btn.textContent='Clearing… '+d+'/'+t; });
+        btn.disabled=false; btn.textContent='🗑 Clear all records';
+        toast('Cleared '+total+' records — numbering reset to 1','ok'); buildNavSafe(); route();
+      }},'🗑 Clear all records')));
+    dz.append(db); view.append(dz);
+  }
 };
 
 /* ============================================================================
@@ -2191,6 +2227,16 @@ VIEWS.myamc=function(view){
           toast('Renewal confirmed — our team has been notified','ok'); route(); }}},'Confirm renewal'); }},
   ],amcs,{empty:'No AMC contracts on record yet'})); view.append(p);
 };
+
+/* ---- admin: delete a customer and everything linked to them (duplicate cleanup) ---- */
+function deleteCustomerCascade(c){
+  ['equipment','visits','inquiries','followups','amc','complaints','contacts'].forEach(t=>{
+    store.all(t).filter(x=>x.customerId===c.id).forEach(x=>store.remove(t,x.id));
+  });
+  const u=store.all('users').find(x=>x.role==='customer'&&x.customerId===c.id);
+  if(u) store.remove('users',u.id);     // remove their portal profile (auth credential removed in Firebase console)
+  store.remove('customers',c.id);
+}
 
 /* ---- admin: create / manage a customer's portal login ---- */
 function createPortalLogin(cust){
