@@ -1,0 +1,1861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f4c81">
+<title>Shakti Elevator — Visit, Inquiry &amp; AMC Management</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- ============================================================= -->
+<!--  FIREBASE  (Firestore cloud database + Authentication)        -->
+<!-- ============================================================= -->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script>
+/* ===========================================================================
+   STEP 1 OF SETUP — PASTE YOUR FIREBASE PROJECT CONFIG BELOW.
+   Get it from: Firebase console → Project settings → "Your apps" → Web app → SDK setup & config.
+   Everything else in this file works automatically once this is filled in.
+   (This config is NOT a secret — it is safe to publish on GitHub Pages.
+    Your data is protected by the Firestore security rules in SETUP, not by hiding this.)
+=========================================================================== */
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCdYhXb3nBHqzeQzIXqZJFq6Am5L25WuyM",
+  authDomain: "shakti-elevator-de4f9.firebaseapp.com",
+  projectId: "shakti-elevator-de4f9",
+  storageBucket: "shakti-elevator-de4f9.firebasestorage.app",
+  messagingSenderId: "1017583144955",
+  appId: "1:1017583144955:web:01a26e8be2af5cc3ad455e"
+};
+</script>
+<style>
+:root{
+  --brand:#0f4c81; --brand2:#1769aa; --brand-d:#0b3a63;
+  --bg:#f4f6fa; --card:#ffffff; --ink:#1f2733; --muted:#6b7686; --line:#e4e8ef;
+  --ok:#1a9d5a; --okbg:#e7f6ee; --warn:#c8860a; --warnbg:#fdf3e0; --crit:#d13c3c; --critbg:#fdeaea;
+  --hi:#e06a1c; --hibg:#fceee2; --info:#2f6fbf; --infobg:#e9f1fb;
+  --radius:12px; --sh:0 1px 3px rgba(20,40,80,.08),0 1px 2px rgba(20,40,80,.06);
+  --sh2:0 6px 24px rgba(20,40,80,.14);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:15px}
+a{color:var(--brand2);text-decoration:none}
+.hidden{display:none!important}
+
+/* ---------- LOGIN ---------- */
+#login{position:fixed;inset:0;background:linear-gradient(135deg,#0f4c81,#123a5c 60%,#0b2a44);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60}
+.login-card{background:#fff;border-radius:16px;box-shadow:var(--sh2);width:100%;max-width:380px;padding:28px}
+.login-card h1{margin:0 0 2px;font-size:22px;color:var(--brand)}
+.login-card .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.field input,.field select,.field textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand2);box-shadow:0 0 0 3px rgba(23,105,170,.12)}
+.btn{border:none;border-radius:9px;padding:11px 16px;font-weight:600;background:var(--brand);color:#fff;font-size:15px;display:inline-flex;align-items:center;gap:7px;justify-content:center}
+.btn:hover{background:var(--brand-d)}
+.btn.block{width:100%}
+.btn.sec{background:#eef2f7;color:var(--ink)}.btn.sec:hover{background:#e2e8f1}
+.btn.ghost{background:transparent;color:var(--brand2);border:1px solid var(--line)}
+.btn.danger{background:var(--crit)}.btn.danger:hover{background:#a92f2f}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:8px}
+.btn.xs{padding:4px 8px;font-size:12px;border-radius:7px}
+.demo-creds{margin-top:16px;font-size:12px;color:var(--muted);background:#f6f8fb;border:1px dashed var(--line);border-radius:9px;padding:10px 12px}
+.demo-creds b{color:var(--ink)}
+
+/* ---------- APP FRAME ---------- */
+#app{display:none;min-height:100%}
+.topbar{position:sticky;top:0;z-index:30;background:var(--brand);color:#fff;display:flex;align-items:center;gap:10px;padding:10px 14px;box-shadow:var(--sh)}
+.topbar .menu-btn{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;width:38px;height:38px;font-size:19px;display:none;align-items:center;justify-content:center}
+.topbar .logo{font-weight:800;letter-spacing:.3px;font-size:17px;display:flex;align-items:center;gap:8px}
+.topbar .logo .dot{width:10px;height:10px;border-radius:3px;background:#7fd3a5;box-shadow:0 0 0 3px rgba(127,211,165,.3)}
+.topbar .gsearch{flex:1;max-width:440px;position:relative}
+.topbar .gsearch input{width:100%;padding:9px 12px 9px 34px;border-radius:9px;border:none;background:rgba(255,255,255,.16);color:#fff;outline:none}
+.topbar .gsearch input::placeholder{color:rgba(255,255,255,.75)}
+.topbar .gsearch svg{position:absolute;left:10px;top:9px;opacity:.8}
+.topbar .spacer{flex:1}
+.net{font-size:12px;padding:4px 9px;border-radius:20px;display:flex;align-items:center;gap:5px;font-weight:600}
+.net .d{width:8px;height:8px;border-radius:50%}
+.net.on{background:rgba(127,211,165,.2)}.net.on .d{background:#7fd3a5}
+.net.off{background:rgba(255,180,120,.25)}.net.off .d{background:#ffb478}
+.bell{position:relative;background:rgba(255,255,255,.15);border:none;color:#fff;width:38px;height:38px;border-radius:9px;font-size:17px}
+.bell .badge{position:absolute;top:-4px;right:-4px;background:var(--crit);color:#fff;border-radius:10px;font-size:10px;min-width:17px;height:17px;line-height:17px;text-align:center;padding:0 3px;font-weight:700}
+.userchip{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);padding:5px 10px;border-radius:22px;font-size:13px}
+.userchip .av{width:26px;height:26px;border-radius:50%;background:#fff;color:var(--brand);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:12px}
+
+.frame{display:flex;align-items:stretch}
+.side{width:230px;flex:none;background:#0d2a44;color:#cdd8e6;min-height:calc(100vh - 58px);padding:12px 10px;position:sticky;top:58px;overflow:auto}
+.side .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6f89a6;margin:14px 10px 6px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;color:#cdd8e6;font-weight:500;font-size:14.5px;margin-bottom:2px}
+.nav a .ic{width:20px;text-align:center;opacity:.9}
+.nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav a.active{background:var(--brand2);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.nav a .cnt{margin-left:auto;background:rgba(255,255,255,.14);border-radius:10px;font-size:11px;padding:1px 7px}
+.nav a.active .cnt{background:rgba(255,255,255,.25)}
+.scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:24}
+
+.main{flex:1;min-width:0;padding:18px 20px 90px}
+.page-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.page-head h2{margin:0;font-size:20px}
+.page-head .sub{color:var(--muted);font-size:13px}
+.page-head .actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---------- CARDS / GRID ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--sh);cursor:pointer;transition:.12s}
+.stat:hover{transform:translateY(-2px);box-shadow:var(--sh2)}
+.stat .lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.stat .val{font-size:26px;font-weight:800;margin-top:4px}
+.stat .foot{font-size:11.5px;color:var(--muted);margin-top:3px}
+.stat.b-crit{border-left:4px solid var(--crit)} .stat.b-hi{border-left:4px solid var(--hi)}
+.stat.b-warn{border-left:4px solid var(--warn)} .stat.b-info{border-left:4px solid var(--info)}
+.stat.b-ok{border-left:4px solid var(--ok)} .stat.b-brand{border-left:4px solid var(--brand)}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--sh);margin-bottom:16px;overflow:hidden}
+.panel .ph{padding:13px 16px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.panel .ph .actions{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap}
+.panel .pb{padding:14px 16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart-box{position:relative;height:260px}
+
+/* ---------- TABLE ---------- */
+.tablewrap{overflow:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px}
+table.tbl th{position:sticky;top:0;background:#f7f9fc;text-align:left;padding:10px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}
+table.tbl th .ar{opacity:.5;font-size:10px}
+table.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+table.tbl tr:hover td{background:#fafcff}
+table.tbl tr.clk{cursor:pointer}
+.empty{text-align:center;color:var(--muted);padding:34px 16px}
+.empty .ico{font-size:34px;opacity:.4}
+
+/* ---------- BADGES ---------- */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.bg-ok{background:var(--okbg);color:var(--ok)} .bg-warn{background:var(--warnbg);color:var(--warn)}
+.bg-crit{background:var(--critbg);color:var(--crit)} .bg-hi{background:var(--hibg);color:var(--hi)}
+.bg-info{background:var(--infobg);color:var(--info)} .bg-mut{background:#eef1f5;color:var(--muted)}
+.bg-brand{background:#e7eefb;color:var(--brand)}
+
+/* ---------- FILTERS ---------- */
+.filters{display:flex;gap:9px;flex-wrap:wrap;align-items:end}
+.filters .f{display:flex;flex-direction:column;gap:4px}
+.filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase}
+.filters input,.filters select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:130px;background:#fff}
+
+/* ---------- MODAL ---------- */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(15,30,55,.5);z-index:50;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:14px;box-shadow:var(--sh2);width:100%;max-width:640px;animation:pop .15s ease}
+.modal.wide{max-width:900px}
+@keyframes pop{from{transform:translateY(8px);opacity:.6}to{transform:none;opacity:1}}
+.modal .mh{display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}
+.modal .mh h3{margin:0;font-size:17px}
+.modal .mh .x{margin-left:auto;background:#f1f4f8;border:none;width:32px;height:32px;border-radius:8px;font-size:17px;color:var(--muted)}
+.modal .mb{padding:18px}
+.modal .mf{padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.form-grid .full{grid-column:1/-1}
+.hint{font-size:11.5px;color:var(--muted);margin-top:3px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:#eef2f7;border:1px solid var(--line);border-radius:20px;padding:4px 10px;font-size:12.5px;display:flex;align-items:center;gap:6px}
+.chip b{font-weight:700}
+.chip .rm{cursor:pointer;color:var(--crit);font-weight:800}
+
+/* ---------- C360 ---------- */
+.c360-head{background:linear-gradient(120deg,var(--brand),var(--brand2));color:#fff;border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;box-shadow:var(--sh)}
+.c360-head h2{margin:0 0 3px;font-size:22px}
+.c360-head .meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;opacity:.95;margin-top:8px}
+.c360-head .meta span{display:flex;align-items:center;gap:6px}
+.tabbar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1px solid var(--line)}
+.tabbar button{background:none;border:none;padding:9px 13px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;font-size:14px}
+.tabbar button.active{color:var(--brand);border-bottom-color:var(--brand)}
+.timeline .ti{border-left:2px solid var(--line);padding:2px 0 14px 16px;position:relative}
+.timeline .ti:before{content:"";position:absolute;left:-6px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--brand2)}
+.timeline .ti .dt{font-size:12px;color:var(--muted)}
+
+/* ---------- FAB / TOAST ---------- */
+.fab{position:fixed;right:20px;bottom:20px;z-index:35;background:var(--ok);color:#fff;border:none;border-radius:30px;padding:14px 20px;font-weight:800;font-size:15px;box-shadow:0 8px 22px rgba(26,157,90,.45);display:flex;align-items:center;gap:9px}
+.fab:hover{background:#15864c}
+#toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:70;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{background:#12263f;color:#fff;padding:11px 16px;border-radius:10px;box-shadow:var(--sh2);font-size:14px;display:flex;align-items:center;gap:9px;animation:pop .15s;max-width:90vw}
+.toast.ok{background:#15864c}.toast.err{background:#b1332f}.toast.warn{background:#b57a10}
+.notif-pop{position:fixed;top:56px;right:12px;width:340px;max-width:92vw;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh2);z-index:45;display:none;max-height:70vh;overflow:auto}
+.notif-pop.open{display:block}
+.notif-pop .nh{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center}
+.notif-item{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;display:flex;gap:9px}
+.notif-item.unread{background:#f0f6ff}
+.notif-item .ic{font-size:16px}
+
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.kv .k{color:var(--muted)}
+.kv .v{font-weight:600;text-align:right}
+.req:after{content:" *";color:var(--crit)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.small{font-size:12.5px;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{flex:1;border:none;background:#fff;padding:9px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--brand);color:#fff}
+.map-preview{background:#eef2f7;border:1px dashed var(--line);border-radius:9px;padding:10px;font-size:13px;color:var(--muted)}
+
+/* ---------- RESPONSIVE ---------- */
+@media(max-width:920px){ .grid2{grid-template-columns:1fr} }
+@media(max-width:780px){
+  .side{position:fixed;left:0;top:0;height:100vh;z-index:25;transform:translateX(-100%);transition:.2s;box-shadow:var(--sh2)}
+  .side.open{transform:none}
+  .scrim.open{display:block}
+  .topbar .menu-btn{display:flex}
+  .topbar .gsearch{display:none}
+  .userchip .nm{display:none}
+  .main{padding:14px 12px 96px}
+  .form-grid{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  .page-head .actions{width:100%}
+  .cards{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-card">
+    <h1>🛗 Shakti Elevator</h1>
+    <div class="sub">Visit • Inquiry • AMC Management</div>
+    <div class="field"><label>Email</label><input id="lg-user" type="email" autocomplete="username" placeholder="you@shaktielevator.com"></div>
+    <div class="field"><label>Password</label><input id="lg-pass" type="password" autocomplete="current-password" placeholder="password"></div>
+    <button class="btn block" id="lg-btn">Sign in</button>
+    <div style="text-align:center;margin-top:10px"><a href="#" id="lg-forgot" class="small">Forgot password?</a></div>
+    <div id="lg-err" class="small" style="color:var(--crit);margin-top:8px;text-align:center"></div>
+    <div class="demo-creds" id="cfgWarn" style="display:none;border-color:var(--crit);background:var(--critbg);color:var(--crit)">
+      <b>Firebase not configured.</b> Open this file and paste your project config into <code>window.FIREBASE_CONFIG</code> near the top, then reload. See the SETUP guide.
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <button class="menu-btn" id="menuBtn">☰</button>
+    <div class="logo"><span class="dot"></span>Shakti Elevator</div>
+    <div class="gsearch">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="globalSearch" placeholder="Search customer, phone, AMC ID, inquiry, serial…">
+    </div>
+    <div class="spacer"></div>
+    <div class="net on" id="netChip"><span class="d"></span><span id="netTxt">Online</span></div>
+    <button class="bell" id="bellBtn">🔔<span class="badge hidden" id="bellBadge">0</span></button>
+    <div class="userchip"><span class="av" id="uAv">A</span><span class="nm" id="uName">Admin</span></div>
+    <button class="bell" id="logoutBtn" title="Sign out">⏻</button>
+  </div>
+
+  <div class="frame">
+    <div class="scrim" id="scrim"></div>
+    <aside class="side" id="side">
+      <nav class="nav" id="nav"></nav>
+    </aside>
+    <main class="main" id="view"></main>
+  </div>
+
+  <button class="fab" id="fab">＋ New Visit</button>
+</div>
+
+<div class="notif-pop" id="notifPop">
+  <div class="nh">Notifications <button class="btn xs sec" id="markAll" style="margin-left:auto">Mark all read</button></div>
+  <div id="notifList"></div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div id="toasts"></div>
+
+<script>window.__SEED__=[{"sr":"1","date":"2026-07-10","site":"Vastav Avanew","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"1st floor Inquiry Pending"},{"sr":"2","date":"2026-07-10","site":"Namastubhyam Apartment","address":"Dhruva Nagar","make":"VB Elevators","new_lift":false,"floors":"G+6","contact":"9637525293","person":"Samadhan Pagar","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Inverter Inquiry under process"},{"sr":"3","date":"2026-07-10","site":"Klyan samruddhi","address":"Dhruva Nagar","make":"Oriyan Tech","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Battery Service Inquiry"},{"sr":"4","date":"2026-07-10","site":"Dhruvaraj Residency","address":"Dhruva Nagar","make":"A-Star Lift","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":"2027-06-01","amc_status":"Active","followup":"Next AMC- 01-06-2027","remarks":"Room No-201, Inquiry Pending"},{"sr":"5","date":"2026-07-10","site":"Ganesh Naxatra","address":"Dhruva Nagar","make":"Ramayana","new_lift":false,"floors":"G+4","contact":"9850414005","person":"Vishal Sindhey","amc_end":null,"amc_status":"Renewed","followup":"AMC DONE","remarks":"AMC & UPD Battery Inquiry"},{"sr":"6","date":"2026-07-11","site":"Krishna Blowsom","address":"Dhruva Nagar","make":"Oriyan Tech","new_lift":false,"floors":"G+4","contact":"9764584514","person":"Shoukhat Shaikh","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Given Rate-11,000/- (Because them current AMC 11,000/-)"},{"sr":"7","date":"2026-07-11","site":"Gayatri Apartment","address":"Dhruva Nagar","make":"Real","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Pending","followup":"Pending","remarks":"1st floor Inquiry Pending"},{"sr":"8","date":"2026-07-11","site":"Yash Blosam","address":"Dhruva Nagar","make":"Swami Elevators","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"9","date":"2026-07-11","site":"Himalaya Heights","address":"Dhruva Nagar","make":"Vartis","new_lift":false,"floors":"G+4","contact":"8180838562","person":"Pratik Sir","amc_end":"2027-07-01","amc_status":"Active","followup":"Next AMC- 01-07-2027","remarks":""},{"sr":"10","date":"2026-07-11","site":"Vaishnavi Apartment","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"11","date":"2026-07-11","site":"Ashok Vrundavan","address":"Dhruva Nagar","make":"Mass Lift","new_lift":false,"floors":"G+7","contact":"8888869458","person":"Jagannath Sir","amc_end":"2027-06-01","amc_status":"Active","followup":"Next AMC- 01-06-2027","remarks":""},{"sr":"12","date":"2026-07-13","site":"Padmakar","address":"Dhruva Nagar","make":"Eekdant Elevators","new_lift":false,"floors":"G+6","contact":"","person":"","amc_end":"2027-06-01","amc_status":"Active","followup":"Next AMC- 01-06-2027","remarks":""},{"sr":"13","date":"2026-07-13","site":"Sai harsh Avanew","address":"Dhruva Nagar","make":"MAK Elevators","new_lift":false,"floors":"\u2026","contact":"9763552122","person":"Sunil Jadhav","amc_end":"2027-02-01","amc_status":"Active","followup":"AMC Due on- 01-02-2027","remarks":""},{"sr":"14","date":"2026-07-13","site":"Ashok Pride","address":"Dhruva Nagar","make":"Tech","new_lift":false,"floors":"G+7","contact":"8600377275","person":"Akshay Bhaltadak","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"15","date":"2026-07-13","site":"Gaurav Height","address":"Dhruva Nagar","make":"Vartis elevators","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 2nd floor"},{"sr":"16","date":"2026-07-13","site":"Sai charan Apartment","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"7875136293","person":"Dinesh Sir","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"17","date":"2026-07-13","site":"Krushna Apartment","address":"Dhruva Nagar","make":"Vision","new_lift":false,"floors":"G+4","contact":"9922145552","person":"Ishwar sir","amc_end":null,"amc_status":"On-Call (No AMC)","followup":"On Call Services","remarks":""},{"sr":"18","date":"2026-07-17","site":"Aashirwad Heights","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+5","contact":"Shubham Sir","person":"9607690073","amc_end":null,"amc_status":"Renewed","followup":"AMC DONE","remarks":""},{"sr":"19","date":"2026-07-17","site":"Lotus Luxury","address":"Dhruva Nagar","make":"Tech","new_lift":false,"floors":"G+4","contact":"8554035747","person":"Thakre","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"New Construction (New Lift)"},{"sr":"20","date":"2026-07-17","site":"Swagat Park","address":"Dhruva Nagar","make":"Power link","new_lift":false,"floors":"G+4","contact":"9890322546","person":"Ravindra Thakre","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 2nd floor Room No-10"},{"sr":"21","date":"2026-07-17","site":"Amigo Royal","address":"Dhruva Nagar","make":"Power link","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 4th floor"},{"sr":"22","date":"2026-07-17","site":"Bhagya Laxmi Aastha","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"9623475782","person":"Kalpesh Nelkar","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"23","date":"2026-07-17","site":"Omeshwar Heights","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"9850892116","person":"Samadhan Suryavanshi","amc_end":null,"amc_status":"Quotation Sent","followup":"AMC Details sent","remarks":""},{"sr":"24","date":"2026-07-18","site":"Vaishnav Heights","address":"Dhruva Nagar","make":"Vartis elevators","new_lift":false,"floors":"G+6","contact":"9890280504","person":"Vasant Bhole","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"25","date":"2026-07-18","site":"Lekhraj Pride","address":"Dhruva Nagar","make":"TOUCH","new_lift":false,"floors":"G+4","contact":"8805769942","person":"Baban Rao","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"26","date":"2026-07-18","site":"Samruddhi Heights","address":"Dhruva Nagar","make":"Express Lift","new_lift":false,"floors":"G+4","contact":"9096086871","person":"Selar Sir","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"27","date":"2026-07-19","site":"Shishav heights","address":"Dhruva Nagar","make":"TOUCH","new_lift":false,"floors":"G+4","contact":"8308515876","person":"Mahesh Khade","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"28","date":"2026-07-19","site":"Yashraj Gaurav Apartment","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"29","date":"2026-07-19","site":"Akshaya Dwelling","address":"Dhruva Nagar","make":"R-Came","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"30","date":"2026-07-19","site":"The garce park","address":"Dhruva Nagar","make":"Tech","new_lift":false,"floors":"G+5","contact":"","person":"New Lift","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"31","date":"2026-07-19","site":"Aekdant Residency","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+6","contact":"","person":"New Lift","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"32","date":"2026-07-19","site":"Rudra heights","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+7","contact":"","person":"New Lift","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"33","date":"2026-07-19","site":"SKY Park View","address":"Dhruva Nagar","make":"Royal Star Elevators","new_lift":false,"floors":"G+7","contact":"9881920749","person":"Surendra Sir","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"34","date":"2026-07-20","site":"Omgiri Residency","address":"Dhruva Nagar","make":"Oriyan Tech","new_lift":false,"floors":"G+6","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 6th floor"},{"sr":"35","date":"2026-07-20","site":"Datta Kunj","address":"Dhruva Nagar","make":"Power link","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"36","date":"2026-07-20","site":"Parth Residency","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"37","date":"2026-07-20","site":"Balaji Apartment","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 3th floor (Visit Pending)"},{"sr":"38","date":"2026-07-20","site":"Samruddhi Heights","address":"Dhruva Nagar","make":"Power link","new_lift":false,"floors":"G+6","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 1St floor"},{"sr":"39","date":"2026-07-20","site":"Renuka Height","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"On-Call (No AMC)","followup":"On Call Services","remarks":""},{"sr":"40","date":"2026-07-20","site":"Rutugand","address":"Dhruva Nagar","make":"Unity Elevator","new_lift":true,"floors":"G+6","contact":"9637529638","person":"Aakash Sir","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"41","date":"2026-07-20","site":"Elight Height","address":"Dhruva Nagar","make":"Royal Star Elevators","new_lift":true,"floors":"G+6","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"42","date":"2026-07-20","site":"Ganesh Apartment","address":"Dhruva Nagar","make":"TOUCH","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 4St floor, RM NO-8"},{"sr":"43","date":"2026-07-20","site":"Shree residency","address":"Dhruva Nagar","make":"Power link","new_lift":false,"floors":"G+4","contact":"9545460193","person":"Pratik Dhange","amc_end":"2027-01-25","amc_status":"Active","followup":"AMC Due on- 25-01-2027","remarks":""},{"sr":"44","date":"2026-07-20","site":"Vaibhav laxmi Apartment","address":"Dhruva Nagar","make":"Ramayana","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"45","date":"2026-07-20","site":"Arnav Height","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"46","date":"2026-07-20","site":"bhagya laxmi Apartment","address":"Dhruva Nagar","make":"JONSON","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"47","date":"2026-07-20","site":"SKY RUDRA","address":"Dhruva Nagar","make":"Royal Star","new_lift":true,"floors":"G+7","contact":"","person":"","amc_end":"2027-07-01","amc_status":"Active","followup":"AMC Due on- 01-07-2027","remarks":""},{"sr":"48","date":"2026-07-20","site":"Swami Charan  Apartment","address":"Dhruva Nagar","make":"Standard Elevators","new_lift":true,"floors":"G+7","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"49","date":"2026-07-20","site":"Swami Darshan","address":"Dhruva Nagar","make":"Power Tech System","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 2nd floor, (Sagar Patil)"},{"sr":"50","date":"2026-07-20","site":"Sadgurukrupa Height","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 4th floor, (Vijay Sir)"},{"sr":"51","date":"2026-07-21","site":"Mayuri Heights","address":"Dhruva Nagar","make":"Royal Star","new_lift":true,"floors":"B+6","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 5th floor, (Builder)"},{"sr":"52","date":"2026-07-21","site":"Sadgurukrupa Height-A","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"53","date":"2026-07-21","site":"Vinayak Residency","address":"Dhruva Nagar","make":"Royal Star","new_lift":false,"floors":"G+4","contact":"9875717618","person":"Vishal Pache","amc_end":null,"amc_status":"On-Call (No AMC)","followup":"On Call Services","remarks":""},{"sr":"54","date":"2026-07-21","site":"Murlidhar Height","address":"Dhruva Nagar","make":"JONSON","new_lift":false,"floors":"\u2026","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"55","date":"2026-07-21","site":"Nishi gandh Apartment","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"56","date":"2026-07-21","site":"Eshan Height","address":"Dhruva Nagar","make":"Not Recorded","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"On-Call (No AMC)","followup":"On Call Services","remarks":""},{"sr":"57","date":"2026-07-22","site":"Jay Shankar Residency","address":"Dhruva Nagar","make":"Ved Elevators","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"58","date":"2026-07-22","site":"Yash Prime Complax","address":"Dhruva Nagar","make":"Tech Elevators","new_lift":false,"floors":"B+4","contact":"7028496131","person":"Vaibhav Pawar","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":"Chairman stay on the 1st floor"},{"sr":"59","date":"2026-07-22","site":"Amar Sahavas APT","address":"Dhruva Nagar","make":"Power link","new_lift":false,"floors":"G+5","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"60","date":"2026-07-22","site":"Shree Ganesh APT","address":"Dhruva Nagar","make":"Royal Star","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""},{"sr":"61","date":"2026-07-22","site":"Madhu Laxmi Heights","address":"Dhruva Nagar","make":"Arrow","new_lift":false,"floors":"G+4","contact":"","person":"","amc_end":null,"amc_status":"Call When Due","followup":"They call when their AMC is due.","remarks":""}];</script>
+<script>
+/* ============================================================================
+   Shakti Elevator  —  single-file field CRM for lift Visit / Inquiry / AMC
+   DATA LAYER:  everything persists through `store`, a set of relational
+   "tables" cached in memory and written through to Firestore (cloud).
+   Reads are synchronous against the cache; writes update the cache and
+   persist each document to Firestore. Auth is Firebase Authentication.
+============================================================================ */
+(function(){
+'use strict';
+
+/* ---------- tiny utils ---------- */
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const el = (t,a={},...kids)=>{const n=document.createElement(t);
+  for(const k in a){ if(k==='class')n.className=a[k]; else if(k==='html')n.innerHTML=a[k];
+    else if(k.startsWith('on'))n.addEventListener(k.slice(2),a[k]); else if(a[k]!=null)n.setAttribute(k,a[k]); }
+  kids.flat().forEach(c=>n.append(c?.nodeType?c:document.createTextNode(c??''))); return n;};
+const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = p => p+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+const nowISO   = ()=> new Date().toISOString();
+function parseD(s){ if(!s)return null; const d=new Date(s+(s.length<=10?'T00:00:00':'')); return isNaN(d)?null:d; }
+function fmtD(s){ const d=parseD(s); if(!d)return '—'; return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDT(s){ const d=s?new Date(s):null; if(!d||isNaN(d))return '—'; return d.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function daysUntil(s){ const d=parseD(s); if(!d)return null; const t=new Date(todayISO()+'T00:00:00'); return Math.round((d-t)/86400000); }
+function addDaysISO(s,n){ const d=parseD(s); if(!d)return null; d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function inr(n){ n=Number(n)||0; return '₹'+n.toLocaleString('en-IN'); }
+async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+function debounce(fn,ms=250){let h;return(...a)=>{clearTimeout(h);h=setTimeout(()=>fn(...a),ms);};}
+
+function toast(msg,type=''){ const t=el('div',{class:'toast '+type},
+  el('span',{},type==='ok'?'✓':type==='err'?'✕':type==='warn'?'⚠':'ℹ'),msg);
+  $('#toasts').append(t); setTimeout(()=>{t.style.opacity='0';t.style.transition='.3s';setTimeout(()=>t.remove(),300);},2600); }
+
+/* ============================================================================
+   STORE  (relational tables over localStorage)  — the swappable seam
+============================================================================ */
+const TABLES=['users','customers','contacts','visits','inquiries','followups',
+              'equipment','amc','alerts','notifications','documents','audit'];
+let DB=null;            // in-memory cache — same shape the whole app already expects
+let fdb=null;           // Firestore instance (set in boot)
+
+/* Firestore rejects `undefined`; strip it (recursively) before every write. */
+function clean(o){ if(Array.isArray(o)) return o.map(clean);
+  if(o&&typeof o==='object'){ const r={}; for(const k in o){ if(o[k]!==undefined) r[k]=clean(o[k]); } return r; }
+  return o; }
+function fsErr(e){ console.error('Firestore write failed',e); toast('Cloud save failed — check connection','err'); }
+
+/* STORE — reads are synchronous against the cache (DB); writes update the cache
+   immediately AND persist to Firestore in the background (write-through).
+   This is the whole "swappable seam": the UI/schema never changed. */
+const store={
+  async load(){                                   // called once, after sign-in
+    DB={seq:{}, settings:null}; TABLES.forEach(t=>DB[t]=[]);
+    const meta=await fdb.collection('meta').doc('settings').get();
+    DB.settings = meta.exists ? mergeSettings(meta.data()) : defaultSettings();
+    const seq =await fdb.collection('meta').doc('seq').get();
+    DB.seq = seq.exists ? (seq.data()||{}) : {};
+    for(const t of TABLES){
+      const snap=await fdb.collection(t).get();
+      DB[t]=snap.docs.map(d=>({...d.data(), id:d.id}));
+    }
+  },
+  save(){ /* no-op: every write now persists its own document */ },
+  all(t){ return DB[t]||[]; },
+  get(t,id){ return (DB[t]||[]).find(r=>r.id===id); },
+  where(t,fn){ return (DB[t]||[]).filter(fn); },
+  seqNext(prefix){ DB.seq[prefix]=(DB.seq[prefix]||0)+1;
+    fdb.collection('meta').doc('seq').set(DB.seq).catch(fsErr); return DB.seq[prefix]; },
+  code(prefix,pad=4){ return prefix+'-'+String(this.seqNext(prefix)).padStart(pad,'0'); },
+  insert(t,obj){ obj.id=obj.id||uid(t); obj._c=nowISO(); (DB[t]=DB[t]||[]).push(obj);
+    fdb.collection(t).doc(obj.id).set(clean(obj)).catch(fsErr);
+    if(t!=='audit') audit('CREATE',t,obj.id,null,obj.code||obj.name||obj.id); return obj; },
+  update(t,id,patch){ const r=this.get(t,id); if(!r)return null; const old={...r};
+    Object.assign(r,patch); r._u=nowISO();
+    fdb.collection(t).doc(id).set(clean(r)).catch(fsErr);
+    if(t!=='audit') audit('UPDATE',t,id,summarizeChange(old,patch),null); return r; },
+  remove(t,id){ const r=this.get(t,id); DB[t]=DB[t].filter(x=>x.id!==id);
+    fdb.collection(t).doc(id).delete().catch(fsErr);
+    if(t!=='audit') audit('DELETE',t,id,r?.code||r?.name||id,null); },
+  settings(){ return DB.settings; },
+  saveSettings(s){ DB.settings=s; fdb.collection('meta').doc('settings').set(clean(s)).catch(fsErr); },
+  export(){ return JSON.stringify(DB,null,2); }
+};
+function mergeSettings(s){ const d=defaultSettings(); return {...d,...s,
+  company:{...d.company,...(s.company||{})}, masters:{...d.masters,...(s.masters||{})},
+  templates:{...d.templates,...(s.templates||{})}}; }
+function summarizeChange(old,patch){ return Object.keys(patch).filter(k=>!k.startsWith('_')&&old[k]!==patch[k])
+  .map(k=>`${k}: "${old[k]??''}" → "${patch[k]??''}"`).join('; '); }
+function audit(action,entity,eid,detail,label){ if(!DB.audit)DB.audit=[];
+  const row={id:uid('aud'),ts:nowISO(),user:(session&&session.name)||'system',
+    action,entity,eid,detail:detail||label||''};
+  DB.audit.push(row);
+  if(fdb) fdb.collection('audit').doc(row.id).set(row).catch(()=>{}); }
+
+/* ---------- default settings / master data ---------- */
+function defaultSettings(){ return {
+  company:{name:'Shakti Elevator',phone:'+91 90000 00000',email:'service@shaktielevator.com',
+           address:'Dhruva Nagar, Nashik, Maharashtra',website:'www.shaktielevator.com',person:'Service Desk'},
+  alertPeriods:[90,60,30,15,7,0], alertOverdue:true, sessionTimeoutMin:30,
+  masters:{
+    customerTypes:['Society / Apartment','Commercial','Builder / New Project','Individual','Institution'],
+    visitPurposes:['AMC Inquiry','AMC Renewal','Service Complaint','New Lift Inquiry','Battery / Inverter','Courtesy Visit','Site Survey'],
+    inquiryCategories:['AMC','Battery Replacement','Inverter / ARD','Spare Parts','New Lift','Modernization','Breakdown Service','Other'],
+    inquiryStatuses:['New','Pending','Quotation Required','Quotation Submitted','Under Discussion','Follow-up Required','Won','Lost','Closed'],
+    priorities:['Low','Medium','High','Urgent'],
+    products:['Passenger Lift','Home Lift','Hospital Lift','Goods Lift','Battery','Inverter/ARD','Controller','Spare Parts','AMC Contract'],
+    amcTypes:['Comprehensive','Semi-Comprehensive','Non-Comprehensive','Labour Only'],
+    serviceFreq:['Monthly','Bi-Monthly','Quarterly','Half-Yearly','Yearly'],
+    equipmentTypes:['Passenger Elevator','Home Elevator','Goods Elevator','Hospital Elevator','Escalator'],
+  },
+  templates:{
+    emailSubject:'AMC Renewal Reminder — {{equipment}} at {{customer}}',
+    email:`Dear {{person}},
+
+This is a reminder that the AMC for {{equipment}} (Make: {{make}}) installed at {{customer}} is due to expire on {{expiry}}.
+
+We request you to kindly initiate the AMC renewal process to ensure uninterrupted service.
+
+AMC Details
+Equipment  : {{equipment}}
+Make/Model : {{make}}
+Serial No. : {{serial}}
+Expiry Date: {{expiry}}
+AMC Value  : {{value}}
+
+For renewal, please contact {{companyPerson}} at {{companyPhone}}.
+
+Regards,
+{{company}}
+{{companyPhone}} | {{companyEmail}}`,
+    whatsapp:`*AMC Renewal Reminder*
+Dear {{person}}, the AMC for {{equipment}} at *{{customer}}* expires on *{{expiry}}*.
+Please renew to avoid service interruption.
+Serial: {{serial}} | Value: {{value}}
+— {{company}}, {{companyPhone}}`,
+    letter:`Subject: Renewal of Annual Maintenance Contract
+
+Dear {{person}},
+
+We wish to inform you that the Annual Maintenance Contract for the elevator installed at your premises ({{customer}}) is due for renewal.
+
+Equipment : {{equipment}}
+Make/Model: {{make}}
+Serial No.: {{serial}}
+Expiry    : {{expiry}}
+Proposed AMC Value: {{value}}
+
+Kindly confirm the renewal at the earliest to ensure continuity of maintenance service and safety compliance.
+
+Thanking you,
+For {{company}}
+{{companyPerson}}
+{{companyPhone}} | {{companyEmail}}`
+  }
+};}
+
+/* ============================================================================
+   AUTH  +  session
+============================================================================ */
+const ROLES={admin:'Admin',engineer:'Field Engineer',viewer:'Management / Viewer'};
+const PERMS={
+  admin:['*'],
+  engineer:['view','customer.add','customer.edit','visit.add','inquiry.add','inquiry.edit','followup.add','amc.view','notify','export'],
+  viewer:['view','export']
+};
+let session=null, idleTimer=null;
+function can(p){ if(!session)return false; const list=PERMS[session.role]||[]; return list.includes('*')||list.includes(p); }
+function requireAdmin(){ return session&&session.role==='admin'; }
+
+/* Firebase Authentication. People sign in with email + password; their role
+   (admin / engineer / viewer) lives in the Firestore users/{uid} document. */
+let secondaryApp=null;     // lets an admin create a user without being logged out themselves
+
+function friendlyAuthErr(e){ const c=(e&&e.code)||'';
+  if(c.includes('invalid-cred')||c.includes('wrong-password')||c.includes('user-not-found')) return 'Invalid email or password';
+  if(c.includes('too-many-requests')) return 'Too many attempts — please try again shortly';
+  if(c.includes('invalid-email')) return 'Enter a valid email address';
+  if(c.includes('email-already-in-use')) return 'An account with that email already exists';
+  if(c.includes('weak-password')) return 'Password must be at least 6 characters';
+  if(c.includes('network')) return 'Network error — check your connection';
+  return (e&&e.message)||'Authentication failed'; }
+
+async function doLogin(email,pass){
+  try{ await firebase.auth().signInWithEmailAndPassword((email||'').trim(),pass); return {ok:true}; }
+  catch(e){ return {ok:false,msg:friendlyAuthErr(e)}; } }
+
+async function loadProfile(fbUser){                       // resolve role from users/{uid}
+  const doc=await fdb.collection('users').doc(fbUser.uid).get();
+  if(!doc.exists) return null;
+  return {id:fbUser.uid, uid:fbUser.uid, email:fbUser.email, ...doc.data()}; }
+
+/* Admin creates a new user via a SECONDARY Firebase app, so the admin's own
+   session is untouched. Creates the Auth account + the users/{uid} profile doc. */
+async function adminCreateUser({name,email,pass,role}){
+  if(!requireAdmin()) throw new Error('Admin only');
+  if(!secondaryApp) secondaryApp=firebase.initializeApp(window.FIREBASE_CONFIG,'secondary');
+  const secAuth=secondaryApp.auth();
+  const cred=await secAuth.createUserWithEmailAndPassword(email.trim(),pass);
+  const u=cred.user.uid;
+  const row={id:u,name,email:email.trim(),role,status:'Active',_c:nowISO()};
+  await fdb.collection('users').doc(u).set(clean(row));
+  if(!DB.users.some(x=>x.id===u)) DB.users.push(row);   // idempotent: realtime listener may have added it already
+  audit('CREATE','users',u,null,email.trim());
+  await secAuth.signOut();
+  return row; }
+
+async function sendReset(email){
+  try{ await firebase.auth().sendPasswordResetEmail((email||'').trim()); toast('Password-reset email sent to '+email,'ok'); }
+  catch(e){ toast(friendlyAuthErr(e),'err'); } }
+
+function logout(){ audit('LOGOUT','users',session?.id,'signed out',null);
+  try{ firebase.auth().signOut(); }catch{}
+  session=null; clearTimeout(idleTimer);
+  $('#app').style.display='none'; $('#login').style.display='flex'; $('#lg-pass').value=''; }
+function resetIdle(){ clearTimeout(idleTimer); const m=store.settings().sessionTimeoutMin||30;
+  idleTimer=setTimeout(()=>{toast('Session expired — please sign in again','warn');logout();},m*60000); }
+
+/* ============================================================================
+   AMC STATUS + ALERT ENGINE  (idempotent milestone ledger)
+============================================================================ */
+function amcStatus(a){
+  if(a.manual==='Cancelled')return 'Cancelled';
+  const dl=daysUntil(a.endDate);
+  if(dl==null)return 'Active';
+  if(dl<0)return 'Expired';
+  if(a.renewedAt && (Date.now()-new Date(a.renewedAt))/86400000<60 && dl>30)return 'Renewed';
+  if(dl<=30)return 'Expiring Soon';
+  return 'Active';
+}
+function amcSeverity(a){ const dl=daysUntil(a.endDate);
+  if(a.manual==='Cancelled')return null;
+  if(dl==null)return null;
+  if(dl<0)return {k:'crit',lbl:'Critical',txt:`Expired ${Math.abs(dl)}d ago`};
+  if(dl<=7)return {k:'hi',lbl:'High',txt:`Expires in ${dl}d`};
+  if(dl<=30)return {k:'warn',lbl:'Warning',txt:`Expires in ${dl}d`};
+  if(dl<=90)return {k:'info',lbl:'Upcoming',txt:`Expires in ${dl}d`};
+  return null;
+}
+/* create alert + in-app notification only once per (amc, milestone) */
+function runAlertScan(){
+  const s=store.settings(); const created=[];
+  store.all('amc').forEach(a=>{
+    if(a.manual==='Cancelled'||!a.endDate)return;
+    const dl=daysUntil(a.endDate);
+    const cust=store.get('customers',a.customerId);
+    const milestones=[...s.alertPeriods].map(d=>({key:d+'d',days:d}));
+    if(s.alertOverdue && dl<0) milestones.push({key:'overdue',days:-1});
+    milestones.forEach(m=>{
+      const trigger = m.key==='overdue'? a.endDate : addDaysISO(a.endDate,-m.days);
+      const due = m.key==='overdue' ? dl<0 : (daysUntil(trigger)<=0);
+      if(!due)return;
+      const exists=store.all('alerts').some(al=>al.amcId===a.id&&al.milestone===m.key);
+      if(exists)return;
+      const al=store.insert('alerts',{id:uid('alt'),code:store.code('ALT'),amcId:a.id,
+        customerId:a.customerId, milestone:m.key,
+        type: m.key==='overdue'?'AMC Overdue':`${m.days} days before expiry`,
+        alertDate:todayISO(), method:'in-app', status:'Generated', by:'system', ts:nowISO()});
+      pushNotif({icon: m.key==='overdue'?'🔴':(m.days<=7?'🟠':m.days<=30?'🟡':'🔵'),
+        title:`AMC ${m.key==='overdue'?'OVERDUE':'expiry in '+m.days+'d'}`,
+        body:`${cust?cust.name:'Customer'} — ${a.equipment||'Elevator'} · expires ${fmtD(a.endDate)}`,
+        link:'#c360/'+a.customerId});
+      created.push(al);
+    });
+  });
+  return created;
+}
+
+/* ============================================================================
+   NOTIFICATIONS
+============================================================================ */
+function pushNotif(n){ store.insert('notifications',{id:uid('ntf'),icon:n.icon||'🔔',title:n.title,
+  body:n.body||'',link:n.link||'',read:false,ts:nowISO()}); }
+function unreadCount(){ return store.all('notifications').filter(n=>!n.read).length; }
+function refreshBell(){ const c=unreadCount(); const b=$('#bellBadge');
+  if(c>0){b.textContent=c;b.classList.remove('hidden');}else b.classList.add('hidden'); }
+function renderNotifPop(){ const list=$('#notifList');
+  const ns=[...store.all('notifications')].sort((a,b)=>b.ts.localeCompare(a.ts)).slice(0,40);
+  list.innerHTML='';
+  if(!ns.length){ list.append(el('div',{class:'empty'},'No notifications yet')); return; }
+  ns.forEach(n=>{ const it=el('div',{class:'notif-item '+(n.read?'':'unread'),onclick:()=>{
+      store.update('notifications',n.id,{read:true}); refreshBell();
+      if(n.link){location.hash=n.link;} $('#notifPop').classList.remove('open'); }},
+    el('div',{class:'ic'},n.icon),
+    el('div',{},el('div',{html:'<b>'+esc(n.title)+'</b>'}),el('div',{class:'small'},n.body),
+      el('div',{class:'small'},fmtDT(n.ts))));
+    list.append(it); });
+}
+/* channel dispatcher — swap sendWhatsApp/sendEmail bodies for a Business API later */
+function fillTemplate(tpl,ctx){ return tpl.replace(/\{\{(\w+)\}\}/g,(_,k)=>ctx[k]??''); }
+function amcCtx(a){ const c=store.get('customers',a.customerId)||{}; const eq=store.get('equipment',a.equipmentId)||{};
+  const s=store.settings().company;
+  return {person:c.contactPerson||'Customer',customer:c.name||'',equipment:a.equipment||eq.type||'Elevator',
+    make:(eq.make||'')+(eq.model?(' / '+eq.model):''),serial:a.serial||eq.serial||'—',
+    expiry:fmtD(a.endDate),value:a.value?inr(a.value):'—',
+    company:s.name,companyPhone:s.phone,companyEmail:s.email,companyPerson:s.person}; }
+function sendEmail(a){ const t=store.settings().templates; const ctx=amcCtx(a); const c=store.get('customers',a.customerId);
+  const sub=encodeURIComponent(fillTemplate(t.emailSubject,ctx)); const body=encodeURIComponent(fillTemplate(t.email,ctx));
+  logComm(a,'Email',c?.email||''); window.open(`mailto:${c?.email||''}?subject=${sub}&body=${body}`,'_blank'); }
+function sendWhatsApp(a){ const t=store.settings().templates; const ctx=amcCtx(a); const c=store.get('customers',a.customerId);
+  const num=(c?.mobile||'').replace(/\D/g,''); const msg=encodeURIComponent(fillTemplate(t.whatsapp,ctx));
+  logComm(a,'WhatsApp',c?.mobile||''); window.open(`https://wa.me/${num?('91'+num.slice(-10)):''}?text=${msg}`,'_blank'); }
+function logComm(a,method,to){ store.insert('documents',{id:uid('cm'),kind:'comm',customerId:a.customerId,amcId:a.id,
+  method,to,by:session.name,ts:nowISO(),subject:'AMC renewal ('+method+')'});
+  pushNotif({icon:'✉️',title:method+' prepared',body:(store.get('customers',a.customerId)?.name||'')+' — AMC renewal',link:'#c360/'+a.customerId});
+  refreshBell(); }
+function renewalPDF(a){ const {jsPDF}=window.jspdf; const doc=new jsPDF(); const t=store.settings().templates; const ctx=amcCtx(a);
+  const s=store.settings().company;
+  doc.setFontSize(16);doc.setFont(undefined,'bold');doc.text(s.name,15,18);
+  doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text(`${s.address}  |  ${s.phone}  |  ${s.email}`,15,25);
+  doc.setDrawColor(200);doc.line(15,29,195,29);
+  doc.setFontSize(10);doc.text('Date: '+fmtD(todayISO()),160,38);
+  const body=fillTemplate(t.letter,ctx); const lines=doc.splitTextToSize(body,175);
+  doc.text(lines,15,48); logComm(a,'PDF Letter',ctx.customer);
+  doc.save(`AMC_Renewal_${(ctx.customer||'letter').replace(/\W+/g,'_')}.pdf`); }
+
+// expose a few to window for inline handlers created later
+window.LC={store,session:()=>session};
+
+/* ============================================================================
+   BUILT-IN DATA LOADER — one-click import of the original July-2026 sheet
+   (61 records already parsed into window.__SEED__). Triggered from the Excel
+   Import screen; it is NOT run automatically, so a fresh database stays empty
+   until you load this or upload your own file.
+============================================================================ */
+function loadBuiltinData(){
+  const rows = window.__SEED__ || [];
+  const engName = (session&&session.name) || 'Imported';
+  const before = store.all('customers').length;
+  const catFromRemarks = r=>{ const x=(r||'').toLowerCase();
+    if(x.includes('battery'))return 'Battery Replacement';
+    if(x.includes('inverter')||x.includes('inverter'))return 'Inverter / ARD';
+    if(x.includes('new lift')||x.includes('new construction'))return 'New Lift';
+    if(x.includes('amc'))return 'AMC'; return 'AMC'; };
+  rows.forEach(r=>{
+    // Customer
+    const cust=store.insert('customers',{code:store.code('CUST'),name:r.site,company:r.site,
+      contactPerson:r.person||'',mobile:r.contact||'',altMobile:'',email:'',
+      address:r.address||'',city:'Nashik',state:'Maharashtra',pin:'',
+      type: r.new_lift?'Builder / New Project':'Society / Apartment',
+      segment:'Elevator', assigned:engName, status:'Active',
+      remarks:r.remarks||'', created:r.date||todayISO(), lastVisit:r.date||''});
+    if(r.person||r.contact) store.insert('contacts',{customerId:cust.id,name:r.person||'Contact',
+      mobile:r.contact||'',role:'Primary'});
+    // Equipment
+    const eqp=store.insert('equipment',{code:store.code('EQP'),customerId:cust.id,
+      type:'Passenger Elevator',make:r.make||'Not Recorded',model:'',serial:'',
+      floors:r.floors||'', newLift:!!r.new_lift, install:'',warrantyStart:'',warrantyEnd:'',
+      status:'Operational',remarks:r.floors?('Stops: '+r.floors):''});
+    // Visit
+    const vis=store.insert('visits',{code:store.code('VIS'),customerId:cust.id,
+      date:r.date||todayISO(),time:'',contactPerson:r.person||'',employee:engName,
+      purpose: r.new_lift?'New Lift Inquiry':'AMC Inquiry', equipmentId:eqp.id,
+      inquiryType:catFromRemarks(r.remarks), requirement:r.remarks||'',
+      value:'', status: r.remarks?'Inquiry Logged':'Visited', priority:'Medium',
+      nextFollowup:'', remarks:r.followup||'', photo:'', lat:'',lng:''});
+    // Inquiry (only if there is a substantive remark)
+    if(r.remarks){ const inq=store.insert('inquiries',{code:store.code('INQ'),customerId:cust.id,visitId:vis.id,
+      date:r.date||todayISO(), product: r.new_lift?'Passenger Lift':(catFromRemarks(r.remarks)==='Battery Replacement'?'Battery':'AMC Contract'),
+      category:catFromRemarks(r.remarks), description:r.remarks,
+      value: (r.remarks.match(/([\d,]{4,})/)?Number(r.remarks.match(/([\d,]{4,})/)[1].replace(/,/g,'')):''),
+      quotationReq: r.remarks.toLowerCase().includes('rate')?'Yes':'No', quotationNo:'',
+      status: /pending/i.test(r.remarks)?'Pending':/rate|given/i.test(r.remarks)?'Quotation Submitted':'New',
+      priority: r.new_lift?'High':'Medium', assigned:engName,
+      nextFollowup: r.amc_end||'', lastFollowup:r.date||'', remarks:r.followup||'', createdBy:engName});
+      // Follow-up entry mirrored from the sheet's FOLLOW UP text
+      store.insert('followups',{inquiryId:inq.id,customerId:cust.id,date:r.date||todayISO(),
+        remark:r.followup||'', nextDate:r.amc_end||'', status:'Open', by:engName});
+    }
+    // AMC — only where the sheet gave a real next-AMC date
+    if(r.amc_end){ store.insert('amc',{code:store.code('AMC'),customerId:cust.id,equipmentId:eqp.id,
+      equipment:'Passenger Elevator', serial:'', startDate:addDaysISO(r.amc_end,-365),
+      endDate:r.amc_end, value:11000, type:'Comprehensive', freq:'Quarterly',
+      assigned:engName, manual:'', renewedAt:'', remarks:'Imported from July-2026 sheet'}); }
+  });
+  runAlertScan();
+  return store.all('customers').length - before;      // number of customers added
+}
+
+/* ============================================================================
+   ROUTER + NAV  (view functions live in app_views.js, attached to VIEWS)
+============================================================================ */
+const VIEWS={};                       // populated by app_views.js
+window.VIEWS=VIEWS; window.LCUtil={$,$$,el,esc,uid,todayISO,nowISO,parseD,fmtD,fmtDT,daysUntil,addDaysISO,inr,
+  toast,store,can,session:()=>session,ROLES,PERMS,amcStatus,amcSeverity,runAlertScan,refreshBell,renderNotifPop,
+  pushNotif,unreadCount,sendEmail,sendWhatsApp,renewalPDF,fillTemplate,amcCtx,debounce,sha256,openModal,closeModal,
+  navCounts,route,loadBuiltinData,adminCreateUser,sendReset,requireAdmin};
+
+const NAV=[
+  ['dashboard','📊','Dashboard'],
+  ['customers','👥','Customers'],
+  ['visits','📍','Visits'],
+  ['inquiries','📨','Inquiries'],
+  ['followups','⏰','Follow-ups'],
+  ['equipment','🛗','Equipment'],
+  ['amc','📄','AMC Management'],
+  ['alerts','🚨','Alerts'],
+  ['reports','📈','Reports'],
+  ['import','⬆️','Excel Import'],
+  ['settings','⚙️','Settings'],
+  ['users','🔐','Users'],
+];
+function navCounts(){ return {
+  customers:store.all('customers').length,
+  inquiries:store.all('inquiries').filter(i=>!['Won','Lost','Closed'].includes(i.status)).length,
+  followups:store.all('followups').filter(f=>f.status==='Open').length,
+  amc:store.all('amc').length,
+  alerts:store.all('amc').filter(a=>amcSeverity(a)).length,
+};}
+function buildNav(){ const nav=$('#nav'); nav.innerHTML=''; const counts=navCounts();
+  NAV.forEach(([id,ic,label])=>{
+    if((id==='users'||id==='settings'||id==='import')&&!requireAdmin())return;
+    const a=el('a',{href:'#'+id,'data-v':id},el('span',{class:'ic'},ic),el('span',{},label));
+    if(counts[id]) a.append(el('span',{class:'cnt'},counts[id]));
+    nav.append(a);
+  });
+}
+function route(){ let hash=location.hash.slice(1)||'dashboard';
+  const [name,arg]=hash.split('/');
+  $$('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.v===name));
+  const fn=VIEWS[name]||VIEWS.dashboard;
+  const view=$('#view'); view.innerHTML=''; window.scrollTo(0,0);
+  try{ fn(view,arg); }catch(e){ console.error(e); view.append(el('div',{class:'empty'},'⚠ '+e.message)); }
+  $('#side').classList.remove('open'); $('#scrim').classList.remove('open');
+  refreshBell();
+}
+
+/* ---------- modal helpers ---------- */
+function openModal(title,bodyNode,footerNodes,wide){
+  const m=$('#modal'); m.className='modal'+(wide?' wide':'');
+  m.innerHTML='';
+  m.append(el('div',{class:'mh'},el('h3',{},title),el('button',{class:'x',onclick:closeModal},'×')));
+  const mb=el('div',{class:'mb'}); mb.append(bodyNode); m.append(mb);
+  if(footerNodes&&footerNodes.length){ const mf=el('div',{class:'mf'}); footerNodes.forEach(n=>mf.append(n)); m.append(mf); }
+  $('#modalBg').classList.add('open');
+}
+function closeModal(){ $('#modalBg').classList.remove('open'); }
+
+/* ============================================================================
+   BOOT
+============================================================================ */
+async function boot(){
+  wireLogin(); wireChrome();
+  const cfg=window.FIREBASE_CONFIG||{};
+  if(!cfg.apiKey || /PASTE_/.test(cfg.apiKey)){        // not configured yet
+    $('#cfgWarn').style.display='block'; $('#login').style.display='flex'; $('#lg-btn').disabled=true; return;
+  }
+  try{ firebase.initializeApp(cfg); fdb=firebase.firestore(); }
+  catch(e){ $('#cfgWarn').style.display='block'; $('#cfgWarn').innerHTML='<b>Firebase failed to start:</b> '+esc(e.message);
+    $('#login').style.display='flex'; return; }
+
+  firebase.auth().onAuthStateChanged(async(fbUser)=>{
+    if(!fbUser){ session=null; $('#app').style.display='none'; $('#login').style.display='flex'; return; }
+    let prof; try{ prof=await loadProfile(fbUser); }
+    catch(e){ $('#lg-err').textContent='Could not read your profile — check Firestore security rules.'; return; }
+    if(!prof){ $('#lg-err').textContent='This account has no access profile yet. Ask an administrator to add you, or finish first-time setup.';
+      await firebase.auth().signOut(); $('#login').style.display='flex'; return; }
+    if(prof.status && prof.status!=='Active'){ $('#lg-err').textContent='This account has been disabled.';
+      await firebase.auth().signOut(); $('#login').style.display='flex'; return; }
+    session={id:prof.uid,uid:prof.uid,email:prof.email,role:prof.role||'viewer',name:prof.name||prof.email};
+    try{ await store.load(); }catch(e){ console.error(e); toast('Could not load data — check Firestore rules','err'); }
+    await seedSettingsIfNeeded();
+    audit('LOGIN','users',session.id,'signed in',null);
+    startRealtimeSync();
+    enterApp();
+  });
+}
+async function seedSettingsIfNeeded(){
+  try{ const m=await fdb.collection('meta').doc('settings').get();
+    if(!m.exists && requireAdmin()) await fdb.collection('meta').doc('settings').set(clean(DB.settings)); }catch{}
+}
+/* Live multi-user sync: when anyone changes data, every signed-in device updates. */
+let syncT=null;
+function startRealtimeSync(){
+  TABLES.filter(t=>t!=='audit').forEach(t=>{
+    fdb.collection(t).onSnapshot(snap=>{ DB[t]=snap.docs.map(d=>({...d.data(),id:d.id})); scheduleSyncRender(); },
+      err=>console.warn('sync '+t+':',err.message));
+  });
+  fdb.collection('meta').doc('settings').onSnapshot(d=>{ if(d.exists) DB.settings=mergeSettings(d.data()); });
+}
+function scheduleSyncRender(){ clearTimeout(syncT); syncT=setTimeout(()=>{
+  if(!session) return;
+  if($('#modalBg').classList.contains('open')) return;                 // don't wipe an open form/modal
+  const tag=document.activeElement&&document.activeElement.tagName;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(tag||'')) return;                // don't interrupt typing
+  buildNav(); refreshBell(); route();
+},450); }
+
+function enterApp(){
+  $('#login').style.display='none'; $('#app').style.display='block';
+  $('#uName').textContent=session.name; $('#uAv').textContent=(session.name||'?')[0].toUpperCase();
+  buildNav(); runAlertScan(); refreshBell(); resetIdle();
+  if(!location.hash) location.hash='#dashboard'; else route();
+}
+function wireLogin(){
+  const go=async()=>{ const u=$('#lg-user').value,p=$('#lg-pass').value; $('#lg-err').textContent='';
+    if(!u||!p){ $('#lg-err').textContent='Enter your email and password'; return; }
+    $('#lg-btn').disabled=true; const r=await doLogin(u,p); $('#lg-btn').disabled=false;
+    if(!r.ok) $('#lg-err').textContent=r.msg;        /* success handled by onAuthStateChanged */ };
+  $('#lg-btn').onclick=go;
+  ['lg-user','lg-pass'].forEach(id=>$('#'+id).addEventListener('keydown',e=>{if(e.key==='Enter')go();}));
+  const fp=$('#lg-forgot'); if(fp) fp.onclick=e=>{ e.preventDefault(); const em=($('#lg-user').value||'').trim();
+    if(!em){ $('#lg-err').textContent='Type your email above first, then tap "Forgot password?"'; return; } sendReset(em); };
+}
+function wireChrome(){
+  $('#logoutBtn').onclick=logout;
+  $('#menuBtn').onclick=()=>{$('#side').classList.toggle('open');$('#scrim').classList.toggle('open');};
+  $('#scrim').onclick=()=>{$('#side').classList.remove('open');$('#scrim').classList.remove('open');};
+  $('#fab').onclick=()=>VIEWS.visitForm&&VIEWS.visitForm();
+  $('#bellBtn').onclick=()=>{const p=$('#notifPop');p.classList.toggle('open');if(p.classList.contains('open'))renderNotifPop();};
+  $('#markAll').onclick=()=>{store.all('notifications').forEach(n=>{if(!n.read)store.update('notifications',n.id,{read:true});});refreshBell();renderNotifPop();};
+  $('#modalBg').onclick=e=>{if(e.target.id==='modalBg')closeModal();};
+  $('#globalSearch').addEventListener('input',debounce(e=>globalSearch(e.target.value),200));
+  $('#globalSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){location.hash='#customers?q='+encodeURIComponent(e.target.value);}});
+  window.addEventListener('hashchange',route);
+  window.addEventListener('online',()=>setNet(true)); window.addEventListener('offline',()=>setNet(false));
+  setNet(navigator.onLine);
+  ['click','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{if(session)resetIdle();},{passive:true}));
+}
+function setNet(on){ const c=$('#netChip'); c.className='net '+(on?'on':'off'); $('#netTxt').textContent=on?'Online':'Offline · will sync when reconnected'; }
+function globalSearch(q){ q=q.trim().toLowerCase(); if(!q){$('#notifPop').classList.remove('open');return;}
+  const hits=[]; const add=(t,label,link)=>hits.push({t,label,link});
+  store.all('customers').forEach(c=>{ if([c.name,c.code,c.mobile,c.company,c.city,c.contactPerson].join(' ').toLowerCase().includes(q)) add('Customer',c.name+' · '+c.code,'#c360/'+c.id); });
+  store.all('amc').forEach(a=>{ const c=store.get('customers',a.customerId); if([a.code,a.serial,a.equipment].join(' ').toLowerCase().includes(q)) add('AMC',a.code+' · '+(c?c.name:''),'#c360/'+a.customerId); });
+  store.all('inquiries').forEach(i=>{ if([i.code,i.description,i.category].join(' ').toLowerCase().includes(q)) add('Inquiry',i.code+' · '+i.category,'#inquiries?q='+encodeURIComponent(q)); });
+  store.all('equipment').forEach(e=>{ if([e.serial,e.make,e.model].join(' ').toLowerCase().includes(q)&&e.serial) add('Equipment',(e.serial||e.make),'#c360/'+e.customerId); });
+  const p=$('#notifPop'); p.classList.add('open'); const list=$('#notifList'); list.innerHTML='';
+  $('.nh',p).firstChild.textContent='Search results ('+hits.length+') ';
+  if(!hits.length){list.append(el('div',{class:'empty'},'No matches'));return;}
+  hits.slice(0,25).forEach(h=>list.append(el('div',{class:'notif-item',onclick:()=>{location.hash=h.link;p.classList.remove('open');$('#globalSearch').value='';}},
+    el('div',{class:'ic'},'🔎'),el('div',{},el('div',{html:'<b>'+esc(h.label)+'</b>'}),el('div',{class:'small'},h.t)))));
+}
+
+document.addEventListener('DOMContentLoaded',boot);
+})();
+
+</script>
+<script>
+/* ============================================================================
+   VIEWS  — every screen. Depends on window.LCUtil + window.VIEWS from app_core
+============================================================================ */
+(function(){
+'use strict';
+const U=window.LCUtil, VIEWS=window.VIEWS;
+const {$,$$,el,esc,uid,todayISO,nowISO,parseD,fmtD,fmtDT,daysUntil,addDaysISO,inr,toast,store,can,
+  ROLES,amcStatus,amcSeverity,runAlertScan,refreshBell,pushNotif,sendEmail,sendWhatsApp,renewalPDF,
+  fillTemplate,amcCtx,debounce,openModal,closeModal,route,navCounts}=U;
+const session=U.session;
+const S=()=>store.settings(); const M=()=>store.settings().masters;
+let charts=[];
+
+/* ---------- shared UI helpers ---------- */
+function pageHead(title,sub,actions){ const h=el('div',{class:'page-head'},
+  el('div',{},el('h2',{},title), sub?el('div',{class:'sub'},sub):'')); 
+  if(actions){const a=el('div',{class:'actions'});actions.forEach(x=>x&&a.append(x));h.append(a);} return h; }
+function badge(txt,cls){ return el('span',{class:'badge '+cls},txt); }
+const STCLS={ 'New':'bg-info','Pending':'bg-warn','Quotation Required':'bg-warn','Quotation Submitted':'bg-brand',
+  'Under Discussion':'bg-brand','Follow-up Required':'bg-warn','Won':'bg-ok','Lost':'bg-crit','Closed':'bg-mut',
+  'Active':'bg-ok','Expiring Soon':'bg-warn','Expired':'bg-crit','Renewed':'bg-brand','Cancelled':'bg-mut',
+  'Low':'bg-mut','Medium':'bg-info','High':'bg-hi','Urgent':'bg-crit','Open':'bg-info','Done':'bg-ok'};
+function stBadge(s){ return badge(s||'—',STCLS[s]||'bg-mut'); }
+function amcBadge(a){ const s=amcStatus(a); return badge(s,STCLS[s]||'bg-mut'); }
+
+function selectEl(opts,val,attrs={}){ const s=el('select',attrs);
+  if(attrs.placeholder!==undefined){s.append(el('option',{value:''},attrs.placeholder));}
+  opts.forEach(o=>{const v=typeof o==='object'?o.v:o,t=typeof o==='object'?o.t:o;
+    const op=el('option',{value:v},t); if(String(v)===String(val))op.selected=true; s.append(op);}); return s; }
+function field(label,input,{req,hint,full}={}){ const w=el('div',{class:'field'+(full?' full':'')},
+  el('label',{class:req?'req':''},label),input); if(hint)w.append(el('div',{class:'hint'},hint)); return w; }
+
+/* generic sortable table. cols=[{key,label,render?,val?,cls?}], rows=[] */
+function dataTable(cols,rows,{onRow,empty='No records'}={}){
+  const wrap=el('div',{class:'tablewrap'}); if(!rows.length){wrap.append(el('div',{class:'empty'},
+    el('div',{class:'ico'},'📭'),el('div',{},empty)));return wrap;}
+  let sortKey=null,dir=1;
+  const tbl=el('table',{class:'tbl'}); const thead=el('thead'); const tr=el('tr');
+  cols.forEach(c=>{ const th=el('th',{onclick:()=>{ if(sortKey===c.key)dir*=-1; else{sortKey=c.key;dir=1;} draw(); }},
+    c.label,' ',el('span',{class:'ar'},sortKey===c.key?(dir>0?'▲':'▼'):'')); tr.append(th); });
+  thead.append(tr); tbl.append(thead); const tb=el('tbody'); tbl.append(tb);
+  function draw(){ tb.innerHTML=''; let rs=[...rows];
+    if(sortKey){ const c=cols.find(x=>x.key===sortKey); rs.sort((a,b)=>{ let va=c.val?c.val(a):a[sortKey],vb=c.val?c.val(b):b[sortKey];
+      va=va==null?'':va; vb=vb==null?'':vb; if(!isNaN(va)&&!isNaN(vb)&&va!==''&&vb!==''){va=+va;vb=+vb;}
+      return (va>vb?1:va<vb?-1:0)*dir; }); }
+    rs.forEach(r=>{ const rowEl=el('tr',onRow?{class:'clk',onclick:()=>onRow(r)}:{});
+      cols.forEach(c=>{ const td=el('td',{class:c.cls||''}); const v=c.render?c.render(r):(r[c.key]??'—');
+        if(v&&v.nodeType)td.append(v); else td.innerHTML=v===''||v==null?'—':esc(String(v)); rowEl.append(td); });
+      tb.append(rowEl); });
+  } draw(); wrap.append(tbl); return wrap;
+}
+
+/* export helpers */
+function exportData(name,rows,cols){
+  const data=rows.map(r=>{const o={};cols.forEach(c=>o[c.label]=c.val?c.val(r):(r[c.key]??''));return o;});
+  return {data,name};
+}
+function downloadCSV(name,data){ if(!data.length){toast('Nothing to export','warn');return;}
+  const heads=Object.keys(data[0]); const csv=[heads.join(',')].concat(
+    data.map(r=>heads.map(h=>{let v=r[h]==null?'':String(r[h]); if(/[",\n]/.test(v))v='"'+v.replace(/"/g,'""')+'"'; return v;}).join(','))).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const a=el('a',{href:URL.createObjectURL(blob),download:name+'.csv'});
+  document.body.append(a);a.click();a.remove(); toast('CSV exported','ok'); }
+function downloadXLSX(name,data){ if(!data.length){toast('Nothing to export','warn');return;}
+  const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28)); XLSX.writeFile(wb,name+'.xlsx'); toast('Excel exported','ok'); }
+function exportBtns(name,getRows,cols){
+  const mk=(label,fn)=>el('button',{class:'btn sm sec',onclick:()=>{const {data}=exportData(name,getRows(),cols);fn(name,data);}},label);
+  const wrap=el('div',{style:'display:flex;gap:6px'});
+  wrap.append(mk('⬇ CSV',downloadCSV),mk('⬇ Excel',downloadXLSX)); return wrap;
+}
+
+/* customer picker with autocomplete + inline "create new" */
+function customerPicker(onSelect,preId){
+  const box=el('div',{}); const inp=el('input',{placeholder:'Type name / phone / code…',autocomplete:'off',
+    style:'width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px'});
+  const drop=el('div',{style:'border:1px solid var(--line);border-radius:9px;margin-top:4px;max-height:210px;overflow:auto;display:none;box-shadow:var(--sh)'});
+  let selected=null;
+  function pick(c){ selected=c; inp.value=c?c.name+' · '+c.code:''; drop.style.display='none'; onSelect(c); }
+  if(preId){const c=store.get('customers',preId);if(c)pick(c);}
+  inp.addEventListener('input',()=>{ const q=inp.value.trim().toLowerCase(); selected=null; onSelect(null);
+    if(!q){drop.style.display='none';return;} const hits=store.all('customers').filter(c=>
+      [c.name,c.mobile,c.code,c.company,c.contactPerson].join(' ').toLowerCase().includes(q)).slice(0,8);
+    drop.innerHTML=''; drop.style.display='block';
+    hits.forEach(c=>drop.append(el('div',{style:'padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer',
+      onmouseover:function(){this.style.background='#f2f6fc';},onmouseout:function(){this.style.background='';},
+      onclick:()=>pick(c)}, el('b',{},c.name),' ',el('span',{class:'small'},c.code+(c.mobile?(' · '+c.mobile):'')))));
+    drop.append(el('div',{style:'padding:9px 12px;color:var(--brand2);cursor:pointer;font-weight:600',
+      onclick:()=>{ closeModal(); openCustomerForm(null,(nc)=>{ VIEWS.visitForm(nc.id); }); }},'＋ Create new customer'));
+  });
+  box.append(inp,drop); return box;
+}
+
+/* ============================================================================
+   DASHBOARD
+============================================================================ */
+VIEWS.dashboard=function(view){
+  charts.forEach(c=>c.destroy&&c.destroy()); charts=[];
+  const cust=store.all('customers'),amc=store.all('amc'),inq=store.all('inquiries'),
+    vis=store.all('visits'),fu=store.all('followups');
+  const amcBy=n=>amc.filter(a=>{const d=daysUntil(a.endDate);return a.manual!=='Cancelled'&&d!=null&&d>=0&&d<=n;});
+  const expired=amc.filter(a=>{const d=daysUntil(a.endDate);return a.manual!=='Cancelled'&&d!=null&&d<0;});
+  const renewed=amc.filter(a=>amcStatus(a)==='Renewed');
+  const openInq=inq.filter(i=>!['Won','Lost','Closed'].includes(i.status));
+  const todayV=vis.filter(v=>v.date===todayISO());
+  const todayF=fu.filter(f=>f.status==='Open'&&f.nextDate===todayISO());
+  view.append(pageHead('Dashboard',`Welcome, ${session().name} · ${ROLES[session().role]}`,[
+    el('button',{class:'btn',onclick:()=>VIEWS.visitForm()},'＋ New Visit'),
+    el('button',{class:'btn sec',onclick:()=>{const n=runAlertScan();refreshBell();toast(n.length?`${n.length} new alert(s)`:'No new alerts','ok');route();}},'🔄 Run AMC scan')
+  ]));
+  const cards=[
+    ['Total Customers',cust.length,'b-brand','#customers'],
+    ['Active AMCs',amc.filter(a=>amcStatus(a)==='Active').length,'b-ok','#amc'],
+    ['Expiring ≤90d',amcBy(90).length,'b-info','#alerts'],
+    ['Expiring ≤30d',amcBy(30).length,'b-warn','#alerts'],
+    ['Expiring ≤7d',amcBy(7).length,'b-hi','#alerts'],
+    ['Expired AMCs',expired.length,'b-crit','#alerts'],
+    ['Renewed',renewed.length,'b-ok','#amc'],
+    ['Total Inquiry',inq.length,'b-brand','#inquiries'],
+    ['Open Inquiry',openInq.length,'b-info','#inquiries'],
+    ['Won',inq.filter(i=>i.status==='Won').length,'b-ok','#inquiries'],
+    ["Today's Visits",todayV.length,'b-info','#visits'],
+    ["Today's Follow-ups",todayF.length,'b-warn','#followups'],
+  ];
+  const cg=el('div',{class:'cards'});
+  cards.forEach(([l,v,c,link])=>cg.append(el('div',{class:'stat '+c,onclick:()=>location.hash=link},
+    el('div',{class:'lbl'},l),el('div',{class:'val'},v))));
+  view.append(cg);
+
+  // charts row
+  const row=el('div',{class:'grid2'});
+  const mkPanel=(title,canvasId)=>{const p=el('div',{class:'panel'},el('div',{class:'ph'},title),
+    el('div',{class:'pb'},el('div',{class:'chart-box'},el('canvas',{id:canvasId}))));return p;};
+  row.append(mkPanel('Inquiries by month','chMonth'),mkPanel('Inquiry conversion','chConv'),
+    mkPanel('AMC expiry trend (next 6 months)','chAmc'),mkPanel('Employee-wise inquiries','chEmp'));
+  view.append(row);
+
+  // Today's follow-ups panel
+  const fpanel=el('div',{class:'panel'},el('div',{class:'ph'},"Today's & overdue follow-ups",
+    el('div',{class:'actions'},el('a',{href:'#followups',class:'btn xs sec'},'View all'))));
+  const dueF=fu.filter(f=>f.status==='Open'&&f.nextDate&&daysUntil(f.nextDate)<=0)
+    .sort((a,b)=>(a.nextDate||'').localeCompare(b.nextDate||''));
+  fpanel.append(dataTable([
+    {key:'cust',label:'Customer',render:r=>{const c=store.get('customers',r.customerId);return c?c.name:'—';}},
+    {key:'nextDate',label:'Due',render:r=>{const d=daysUntil(r.nextDate);return d<0?badge('Overdue '+Math.abs(d)+'d','bg-crit'):badge('Today','bg-warn');}},
+    {key:'remark',label:'Remark'},
+    {key:'by',label:'Owner'},
+  ],dueF,{onRow:r=>location.hash='#c360/'+r.customerId,empty:'No follow-ups due today 🎉'}));
+  view.append(fpanel);
+
+  // draw charts (after DOM in place)
+  setTimeout(()=>drawDashCharts(inq),0);
+};
+function drawDashCharts(inq){
+  const mColors=['#0f4c81','#1769aa','#2f6fbf','#7fb2e6','#c8dcf3'];
+  // by month
+  const bm={}; inq.forEach(i=>{const m=(i.date||'').slice(0,7);if(m)bm[m]=(bm[m]||0)+1;});
+  const mk=Object.keys(bm).sort();
+  charts.push(new Chart($('#chMonth'),{type:'bar',data:{labels:mk.map(m=>m),
+    datasets:[{label:'Inquiries',data:mk.map(m=>bm[m]),backgroundColor:'#1769aa',borderRadius:5}]},
+    options:{plugins:{legend:{display:false}},maintainAspectRatio:false,scales:{y:{beginAtZero:true,ticks:{precision:0}}}}}));
+  // conversion
+  const won=inq.filter(i=>i.status==='Won').length,lost=inq.filter(i=>i.status==='Lost').length,
+    open=inq.length-won-lost;
+  charts.push(new Chart($('#chConv'),{type:'doughnut',data:{labels:['Won','Lost','Open/In-progress'],
+    datasets:[{data:[won,lost,open],backgroundColor:['#1a9d5a','#d13c3c','#c8860a']}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}}));
+  // AMC expiry trend next 6 months
+  const amc=store.all('amc'); const buckets={}; const now=new Date();
+  for(let k=0;k<6;k++){const d=new Date(now.getFullYear(),now.getMonth()+k,1);buckets[d.toISOString().slice(0,7)]=0;}
+  amc.forEach(a=>{const m=(a.endDate||'').slice(0,7);if(m in buckets)buckets[m]++;});
+  const bk=Object.keys(buckets);
+  charts.push(new Chart($('#chAmc'),{type:'line',data:{labels:bk,
+    datasets:[{label:'AMCs expiring',data:bk.map(m=>buckets[m]),borderColor:'#d13c3c',backgroundColor:'rgba(209,60,60,.12)',fill:true,tension:.3}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}}));
+  // employee-wise
+  const be={}; inq.forEach(i=>{const e=i.assigned||'Unassigned';be[e]=(be[e]||0)+1;});
+  const ek=Object.keys(be);
+  charts.push(new Chart($('#chEmp'),{type:'bar',data:{labels:ek,
+    datasets:[{label:'Inquiries',data:ek.map(e=>be[e]),backgroundColor:'#2f6fbf',borderRadius:5}]},
+    options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}}));
+}
+
+/* ============================================================================
+   CUSTOMERS
+============================================================================ */
+VIEWS.customers=function(view,arg){
+  const params=new URLSearchParams((location.hash.split('?')[1]||''));
+  let q=params.get('q')||'';
+  const head=pageHead('Customers',store.all('customers').length+' records',[
+    can('customer.add')?el('button',{class:'btn',onclick:()=>openCustomerForm()},'＋ Add Customer'):null,
+    exportBtns('Customers',()=>filtered(),CUST_COLS)
+  ]);
+  view.append(head);
+  const bar=el('div',{class:'panel'}); const pb=el('div',{class:'pb filters'});
+  const qi=el('input',{placeholder:'Search name / phone / code / city…',value:q,style:'min-width:240px'});
+  const typeF=selectEl(M().customerTypes,'',{placeholder:'All types'});
+  const empF=selectEl([...new Set(store.all('customers').map(c=>c.assigned).filter(Boolean))],'',{placeholder:'All employees'});
+  pb.append(field('Search',qi),field('Type',typeF),field('Assigned',empF));
+  bar.append(pb); view.append(bar);
+  const tblPanel=el('div',{class:'panel'}); view.append(tblPanel);
+  function filtered(){ const s=qi.value.trim().toLowerCase();
+    return store.all('customers').filter(c=>{
+      if(s&&![c.name,c.code,c.mobile,c.company,c.city,c.contactPerson].join(' ').toLowerCase().includes(s))return false;
+      if(typeF.value&&c.type!==typeF.value)return false;
+      if(empF.value&&c.assigned!==empF.value)return false; return true;});}
+  function draw(){ tblPanel.innerHTML=''; const rows=filtered();
+    tblPanel.append(el('div',{class:'ph'},'Results ('+rows.length+')'));
+    tblPanel.append(dataTable([
+      {key:'code',label:'Code'},
+      {key:'name',label:'Customer',render:r=>el('b',{},r.name)},
+      {key:'contactPerson',label:'Contact'},
+      {key:'mobile',label:'Mobile'},
+      {key:'city',label:'City'},
+      {key:'type',label:'Type',render:r=>badge(r.type||'—','bg-mut')},
+      {key:'assigned',label:'Assigned'},
+      {key:'amc',label:'AMC',render:r=>{const a=store.where('amc',x=>x.customerId===r.id);
+        if(!a.length)return badge('None','bg-mut'); const sev=a.map(amcSeverity).filter(Boolean);
+        return sev.length?badge(sev.some(s=>s.k==='crit')?'⚠ Expired':'Due','sev'&&(sev.some(s=>s.k==='crit')?'bg-crit':'bg-warn')):badge('Active','bg-ok');}},
+    ],rows,{onRow:r=>location.hash='#c360/'+r.id}));
+  }
+  [qi,typeF,empF].forEach(i=>i.addEventListener('input',draw)); draw();
+};
+const CUST_COLS=[{key:'code',label:'Customer Code'},{key:'name',label:'Customer Name'},{key:'company',label:'Company'},
+  {key:'contactPerson',label:'Contact Person'},{key:'mobile',label:'Mobile'},{key:'altMobile',label:'Alt Mobile'},
+  {key:'email',label:'Email'},{key:'address',label:'Address'},{key:'city',label:'City'},{key:'state',label:'State'},
+  {key:'pin',label:'PIN'},{key:'type',label:'Type'},{key:'segment',label:'Segment'},{key:'assigned',label:'Assigned'},
+  {key:'status',label:'Status'},{key:'created',label:'Created'},{key:'lastVisit',label:'Last Visit'}];
+
+function openCustomerForm(cust,after){
+  const c=cust||{}; const g=el('div',{class:'form-grid'});
+  const f={};
+  const add=(k,label,input,opts)=>{f[k]=input;g.append(field(label,input,opts));};
+  add('name','Customer / Site Name',el('input',{value:c.name||''}),{req:true});
+  add('company','Company / Organization',el('input',{value:c.company||''}));
+  add('contactPerson','Contact Person',el('input',{value:c.contactPerson||''}));
+  add('mobile','Mobile Number',el('input',{value:c.mobile||'',type:'tel'}));
+  add('altMobile','Alternate Mobile',el('input',{value:c.altMobile||'',type:'tel'}));
+  add('email','Email',el('input',{value:c.email||'',type:'email'}));
+  add('address','Address',el('input',{value:c.address||''}),{full:true});
+  add('city','City',el('input',{value:c.city||''}));
+  add('state','State',el('input',{value:c.state||''}));
+  add('pin','PIN Code',el('input',{value:c.pin||'',type:'tel'}));
+  add('type','Customer Type',selectEl(M().customerTypes,c.type,{placeholder:'Select…'}));
+  add('segment','Industry / Segment',el('input',{value:c.segment||''}));
+  add('assigned','Assigned Employee',selectEl(store.all('users').map(u=>u.name),c.assigned||session().name));
+  add('status','Customer Status',selectEl(['Active','Prospect','Inactive','Lost'],c.status||'Active'));
+  add('remarks','Remarks',el('textarea',{rows:2},c.remarks||''),{full:true});
+  const save=el('button',{class:'btn',onclick:()=>{
+    if(!f.name.value.trim()){toast('Customer name is required','err');return;}
+    const data={};Object.keys(f).forEach(k=>data[k]=f[k].value);
+    if(cust){store.update('customers',cust.id,data);toast('Customer updated','ok');route();}
+    else{data.created=todayISO();const nc=store.insert('customers',data);toast('Customer added','ok');
+      buildNavSafe(); if(after)after(nc); else location.hash='#c360/'+nc.id;}
+    closeModal();
+  }},cust?'Save changes':'Add customer');
+  openModal(cust?'Edit Customer':'New Customer',g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save],true);
+}
+function buildNavSafe(){ try{U.navCounts&&document.querySelectorAll('#nav a').forEach(a=>{const c=navCounts()[a.dataset.v];const cnt=a.querySelector('.cnt');if(c!=null){if(cnt)cnt.textContent=c;}});}catch{} }
+
+/* ============================================================================
+   VISIT ENTRY  (mobile-first)  — also invoked by FAB
+============================================================================ */
+VIEWS.visits=function(view){
+  view.append(pageHead('Visits',store.all('visits').length+' logged',[
+    el('button',{class:'btn',onclick:()=>VIEWS.visitForm()},'＋ New Visit'),
+    exportBtns('Visits',()=>store.all('visits'),VIS_COLS)]));
+  const p=el('div',{class:'panel'}); view.append(p);
+  const rows=[...store.all('visits')].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  p.append(el('div',{class:'ph'},'All visits'));
+  p.append(dataTable([
+    {key:'date',label:'Date',render:r=>fmtD(r.date)},
+    {key:'cust',label:'Customer',render:r=>{const c=store.get('customers',r.customerId);return c?el('b',{},c.name):'—';}},
+    {key:'purpose',label:'Purpose'},
+    {key:'employee',label:'Engineer'},
+    {key:'status',label:'Status',render:r=>badge(r.status||'—','bg-info')},
+    {key:'priority',label:'Priority',render:r=>stBadge(r.priority)},
+    {key:'nextFollowup',label:'Next F/U',render:r=>fmtD(r.nextFollowup)},
+  ],rows,{onRow:r=>location.hash='#c360/'+r.customerId}));
+};
+const VIS_COLS=[{key:'code',label:'Visit ID'},{key:'date',label:'Date'},{key:'time',label:'Time'},
+  {key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},
+  {key:'contactPerson',label:'Contact'},{key:'employee',label:'Engineer'},{key:'purpose',label:'Purpose'},
+  {key:'inquiryType',label:'Inquiry Type'},{key:'requirement',label:'Requirement'},{key:'value',label:'Est. Value'},
+  {key:'status',label:'Status'},{key:'priority',label:'Priority'},{key:'nextFollowup',label:'Next Follow-up'},{key:'remarks',label:'Remarks'}];
+
+VIEWS.visitForm=function(preCustId){
+  if(!can('visit.add')){toast('You do not have permission to add visits','err');return;}
+  let selCust=preCustId?store.get('customers',preCustId):null;
+  const body=el('div',{});
+  // customer block
+  const custWrap=el('div',{class:'panel',style:'box-shadow:none;margin-bottom:14px'});
+  const cinfo=el('div',{class:'pb'});
+  custWrap.append(el('div',{class:'ph'},'1 · Customer'),el('div',{class:'pb'},
+    field('Search or create customer',customerPicker(c=>{selCust=c;renderCustInfo();},preCustId),{req:true})),cinfo);
+  function renderCustInfo(){ cinfo.innerHTML=''; if(!selCust)return;
+    const amc=store.where('amc',a=>a.customerId===selCust.id);
+    const box=el('div',{class:'pb',style:'background:#f6f9fd;border-top:1px solid var(--line)'});
+    box.append(el('div',{class:'two-col'},
+      kv('Code',selCust.code),kv('Contact',selCust.contactPerson||'—'),
+      kv('Mobile',selCust.mobile||'—'),kv('City',selCust.city||'—')));
+    if(amc.length){ amc.forEach(a=>{const sev=amcSeverity(a);
+      box.append(el('div',{style:'margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap'},
+        badge('AMC '+a.code,'bg-brand'),amcBadge(a),
+        el('span',{class:'small'},'Expires '+fmtD(a.endDate)),
+        sev?badge('⚠ '+sev.txt,'bg-'+sev.k):'' )); }); }
+    else box.append(el('div',{class:'small',style:'margin-top:8px'},'No AMC on record for this customer.'));
+    cinfo.append(box);
+  }
+  renderCustInfo();
+  body.append(custWrap);
+
+  // visit fields
+  const g=el('div',{class:'form-grid'}); const f={};
+  const add=(k,label,input,opts)=>{f[k]=input;g.append(field(label,input,opts));};
+  add('date','Visit Date',el('input',{type:'date',value:todayISO()}),{req:true});
+  add('time','Visit Time',el('input',{type:'time',value:new Date().toTimeString().slice(0,5)}));
+  add('contactPerson','Contact Person',el('input',{value:selCust?.contactPerson||''}));
+  add('employee','Engineer',selectEl(store.all('users').map(u=>u.name),session().name));
+  add('purpose','Purpose of Visit',selectEl(M().visitPurposes,'',{placeholder:'Select…'}));
+  add('equipmentId','Equipment / Product',el('select',{},el('option',{value:''},'—')));
+  add('inquiryType','Inquiry Type',selectEl(M().inquiryCategories,'',{placeholder:'Select…'}));
+  add('value','Estimated Value (₹)',el('input',{type:'number',placeholder:'0'}));
+  add('status','Current Status',selectEl(['Visited','Inquiry Logged','Quotation Needed','Follow-up Set','Closed'],'Visited'));
+  add('priority','Priority',selectEl(M().priorities,'Medium'));
+  add('nextFollowup','Next Follow-up Date',el('input',{type:'date'}));
+  add('requirement','Customer Requirement',el('textarea',{rows:2},''),{full:true});
+  add('remarks','Remarks',el('textarea',{rows:2},''),{full:true});
+  // photo + gps
+  const photoInp=el('input',{type:'file',accept:'image/*',capture:'environment'});
+  let photoData=''; photoInp.addEventListener('change',()=>{const file=photoInp.files[0];if(!file)return;
+    const r=new FileReader();r.onload=()=>{photoData=r.result;toast('Photo attached','ok');};r.readAsDataURL(file);});
+  add('photo','Photo Attachment',photoInp);
+  const gpsBox=el('div',{class:'map-preview'},'Location not captured'); let lat='',lng='';
+  const gpsBtn=el('button',{class:'btn sec sm',type:'button',onclick:()=>{ if(!navigator.geolocation){toast('Geolocation unavailable','err');return;}
+    gpsBox.textContent='Locating…'; navigator.geolocation.getCurrentPosition(pos=>{lat=pos.coords.latitude.toFixed(5);lng=pos.coords.longitude.toFixed(5);
+      gpsBox.innerHTML='📍 '+lat+', '+lng+' &nbsp;<a target="_blank" href="https://maps.google.com/?q='+lat+','+lng+'">Open map</a>';},
+      ()=>{gpsBox.textContent='Permission denied';},{enableHighAccuracy:true,timeout:8000});}},'📍 Capture GPS');
+  g.append(field('GPS / Location',el('div',{},gpsBtn,gpsBox)));
+
+  // update equipment dropdown when customer changes — re-render on save read
+  function refreshEquip(){ const sel=f.equipmentId; sel.innerHTML='<option value="">—</option>';
+    if(selCust)store.where('equipment',e=>e.customerId===selCust.id).forEach(e=>sel.append(el('option',{value:e.id},(e.make||'Elevator')+' · '+(e.floors||'')+(e.serial?(' · '+e.serial):''))));
+  }
+  refreshEquip();
+  body.append(el('div',{class:'panel',style:'box-shadow:none'},el('div',{class:'ph'},'2 · Visit details'),el('div',{class:'pb'},g)));
+
+  // inquiry toggle
+  const inqChk=el('input',{type:'checkbox',checked:true}); 
+  body.append(el('label',{style:'display:flex;gap:8px;align-items:center;margin:6px 2px 0'},inqChk,
+    el('span',{},'Also create an Inquiry from this visit')));
+
+  const save=el('button',{class:'btn',onclick:()=>{
+    if(!selCust){toast('Select or create a customer first','err');return;}
+    refreshEquip();
+    const v={};Object.keys(f).forEach(k=>v[k]=f[k].value);
+    v.customerId=selCust.id; v.photo=photoData; v.lat=lat; v.lng=lng; v.code=store.code('VIS');
+    const visit=store.insert('visits',v);
+    store.update('customers',selCust.id,{lastVisit:v.date});
+    // follow-up
+    if(v.nextFollowup){ store.insert('followups',{customerId:selCust.id,visitId:visit.id,date:v.date,
+      nextDate:v.nextFollowup,remark:v.requirement||v.purpose,status:'Open',by:v.employee}); }
+    // inquiry
+    if(inqChk.checked&&(v.requirement||v.inquiryType)){
+      const inq=store.insert('inquiries',{code:store.code('INQ'),customerId:selCust.id,visitId:visit.id,
+        date:v.date,product:'',category:v.inquiryType||'AMC',description:v.requirement||'',value:v.value||'',
+        quotationReq:'No',quotationNo:'',status:'New',priority:v.priority,assigned:v.employee,
+        nextFollowup:v.nextFollowup||'',lastFollowup:v.date,remarks:v.remarks||'',createdBy:v.employee});
+      if(v.nextFollowup){store.all('followups').filter(x=>x.visitId===visit.id).forEach(x=>store.update('followups',x.id,{inquiryId:inq.id}));}
+    }
+    toast('Visit saved to central database','ok'); closeModal(); buildNavSafe(); location.hash='#c360/'+selCust.id;
+  }},'💾 Save Visit');
+  openModal('New Customer Visit',body,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save],true);
+  // re-render equipment options when picker selects (customerPicker calls onSelect)
+  const obs=setInterval(()=>{ if(!$('#modalBg').classList.contains('open')){clearInterval(obs);return;} refreshEquip(); },800);
+};
+function kv(k,v){return el('div',{class:'kv'},el('span',{class:'k'},k),el('span',{class:'v'},v??'—'));}
+
+/* ============================================================================
+   INQUIRIES
+============================================================================ */
+VIEWS.inquiries=function(view){
+  const params=new URLSearchParams((location.hash.split('?')[1]||''));
+  view.append(pageHead('Inquiries',store.all('inquiries').length+' total',[
+    exportBtns('Inquiries',()=>filtered(),INQ_COLS)]));
+  const bar=el('div',{class:'panel'}); const pb=el('div',{class:'pb filters'});
+  const qi=el('input',{placeholder:'Search…',value:params.get('q')||''});
+  const stF=selectEl(M().inquiryStatuses,'',{placeholder:'All statuses'});
+  const prF=selectEl(M().priorities,'',{placeholder:'All priorities'});
+  const catF=selectEl(M().inquiryCategories,'',{placeholder:'All categories'});
+  const empF=selectEl([...new Set(store.all('inquiries').map(i=>i.assigned).filter(Boolean))],'',{placeholder:'All employees'});
+  const d1=el('input',{type:'date'}),d2=el('input',{type:'date'});
+  pb.append(field('Search',qi),field('Status',stF),field('Priority',prF),field('Category',catF),
+    field('Employee',empF),field('From',d1),field('To',d2));
+  bar.append(pb); view.append(bar);
+  const tp=el('div',{class:'panel'}); view.append(tp);
+  function filtered(){ const s=qi.value.trim().toLowerCase();
+    return store.all('inquiries').filter(i=>{
+      if(s&&![i.code,i.description,i.category,store.get('customers',i.customerId)?.name].join(' ').toLowerCase().includes(s))return false;
+      if(stF.value&&i.status!==stF.value)return false;
+      if(prF.value&&i.priority!==prF.value)return false;
+      if(catF.value&&i.category!==catF.value)return false;
+      if(empF.value&&i.assigned!==empF.value)return false;
+      if(d1.value&&(i.date||'')<d1.value)return false;
+      if(d2.value&&(i.date||'')>d2.value)return false; return true;});}
+  function draw(){ tp.innerHTML=''; const rows=[...filtered()].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    tp.append(el('div',{class:'ph'},'Inquiries ('+rows.length+')'));
+    tp.append(dataTable([
+      {key:'code',label:'ID'},
+      {key:'date',label:'Date',render:r=>fmtD(r.date)},
+      {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+      {key:'category',label:'Category'},
+      {key:'description',label:'Requirement',render:r=>el('span',{class:'small'},(r.description||'').slice(0,60))},
+      {key:'value',label:'Value',render:r=>r.value?inr(r.value):'—'},
+      {key:'status',label:'Status',render:r=>stBadge(r.status)},
+      {key:'priority',label:'Priority',render:r=>stBadge(r.priority)},
+      {key:'nextFollowup',label:'Next F/U',render:r=>fmtD(r.nextFollowup)},
+      {key:'act',label:'',render:r=>can('inquiry.edit')?el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();openInquiryForm(r);}},'Edit'):''},
+    ],rows,{onRow:r=>location.hash='#c360/'+r.customerId}));
+  }
+  [qi,stF,prF,catF,empF,d1,d2].forEach(i=>i.addEventListener('input',draw)); draw();
+};
+const INQ_COLS=[{key:'code',label:'Inquiry ID'},{key:'date',label:'Date'},
+  {key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},
+  {key:'category',label:'Category'},{key:'product',label:'Product'},{key:'description',label:'Requirement'},
+  {key:'value',label:'Estimated Value'},{key:'quotationReq',label:'Quotation Reqd'},{key:'quotationNo',label:'Quotation No'},
+  {key:'status',label:'Status'},{key:'priority',label:'Priority'},{key:'assigned',label:'Assigned'},
+  {key:'nextFollowup',label:'Next Follow-up'},{key:'remarks',label:'Remarks'}];
+
+function openInquiryForm(inq){ const i=inq||{}; const g=el('div',{class:'form-grid'}); const f={};
+  const add=(k,l,inp,o)=>{f[k]=inp;g.append(field(l,inp,o));};
+  add('category','Category',selectEl(M().inquiryCategories,i.category,{placeholder:'Select…'}),{req:true});
+  add('product','Product / Service',selectEl(M().products,i.product,{placeholder:'Select…'}));
+  add('value','Estimated Value (₹)',el('input',{type:'number',value:i.value||''}));
+  add('status','Status',selectEl(M().inquiryStatuses,i.status||'New'),{req:true});
+  add('priority','Priority',selectEl(M().priorities,i.priority||'Medium'));
+  add('assigned','Assigned Employee',selectEl(store.all('users').map(u=>u.name),i.assigned||session().name));
+  add('quotationReq','Quotation Required',selectEl(['No','Yes'],i.quotationReq||'No'));
+  add('quotationNo','Quotation Number',el('input',{value:i.quotationNo||''}));
+  add('nextFollowup','Next Follow-up',el('input',{type:'date',value:i.nextFollowup||''}));
+  add('description','Requirement Description',el('textarea',{rows:2},i.description||''),{full:true});
+  add('remarks','Remarks',el('textarea',{rows:2},i.remarks||''),{full:true});
+  const save=el('button',{class:'btn',onclick:()=>{ const data={};Object.keys(f).forEach(k=>data[k]=f[k].value);
+    if(inq){ const prevFU=inq.nextFollowup; store.update('inquiries',inq.id,data);
+      if(data.nextFollowup&&data.nextFollowup!==prevFU){ store.insert('followups',{inquiryId:inq.id,customerId:inq.customerId,
+        date:todayISO(),nextDate:data.nextFollowup,remark:'Rescheduled follow-up',status:'Open',by:session().name}); }
+      toast('Inquiry updated','ok'); }
+    closeModal(); route();
+  }},'Save');
+  openModal(inq?('Edit Inquiry · '+inq.code):'New Inquiry',g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save],true);
+}
+
+/* ============================================================================
+   FOLLOW-UPS
+============================================================================ */
+VIEWS.followups=function(view){
+  view.append(pageHead('Follow-ups','Today · Overdue · Upcoming · None',[
+    exportBtns('Followups',()=>store.all('followups'),FU_COLS)]));
+  const fu=store.all('followups').filter(f=>f.status==='Open');
+  const today=todayISO();
+  const buckets={
+    today:{title:"Today's Follow-ups",cls:'b-warn',items:fu.filter(f=>f.nextDate===today)},
+    overdue:{title:'Overdue',cls:'b-crit',items:fu.filter(f=>f.nextDate&&f.nextDate<today)},
+    upcoming:{title:'Upcoming',cls:'b-info',items:fu.filter(f=>f.nextDate&&f.nextDate>today)},
+  };
+  const noFU=store.all('inquiries').filter(i=>!['Won','Lost','Closed'].includes(i.status)&&
+    !fu.some(f=>f.inquiryId===i.id&&f.nextDate));
+  const cg=el('div',{class:'cards'});
+  cg.append(el('div',{class:'stat b-warn'},el('div',{class:'lbl'},'Today'),el('div',{class:'val'},buckets.today.items.length)),
+    el('div',{class:'stat b-crit'},el('div',{class:'lbl'},'Overdue'),el('div',{class:'val'},buckets.overdue.items.length)),
+    el('div',{class:'stat b-info'},el('div',{class:'lbl'},'Upcoming'),el('div',{class:'val'},buckets.upcoming.items.length)),
+    el('div',{class:'stat b-mut'},el('div',{class:'lbl'},'No Follow-up Set'),el('div',{class:'val'},noFU.length)));
+  view.append(cg);
+  Object.values(buckets).forEach(b=>{ if(!b.items.length)return;
+    const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},b.title+' ('+b.items.length+')'));
+    p.append(dataTable([
+      {key:'nextDate',label:'Due',render:r=>{const d=daysUntil(r.nextDate);return d<0?badge('Overdue '+Math.abs(d)+'d','bg-crit'):d===0?badge('Today','bg-warn'):badge('in '+d+'d','bg-info');}},
+      {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+      {key:'remark',label:'Remark'},
+      {key:'by',label:'Owner'},
+      {key:'act',label:'',render:r=>el('div',{style:'display:flex;gap:5px'},
+        el('button',{class:'btn xs',onclick:e=>{e.stopPropagation();store.update('followups',r.id,{status:'Done'});toast('Follow-up completed','ok');route();}},'✓ Done'),
+        el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();rescheduleFU(r);}},'Reschedule'))},
+    ],b.items.sort((a,b2)=>(a.nextDate||'').localeCompare(b2.nextDate||'')),{onRow:r=>location.hash='#c360/'+r.customerId}));
+    view.append(p);
+  });
+  if(noFU.length){ const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'Open inquiries with no follow-up scheduled ('+noFU.length+')'));
+    p.append(dataTable([
+      {key:'code',label:'Inquiry'},
+      {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+      {key:'category',label:'Category'},{key:'status',label:'Status',render:r=>stBadge(r.status)},
+      {key:'act',label:'',render:r=>el('button',{class:'btn xs',onclick:e=>{e.stopPropagation();openInquiryForm(r);}},'Set follow-up')},
+    ],noFU,{onRow:r=>location.hash='#c360/'+r.customerId})); view.append(p); }
+};
+const FU_COLS=[{key:'nextDate',label:'Due Date'},{key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},
+  {key:'remark',label:'Remark'},{key:'status',label:'Status'},{key:'by',label:'Owner'},{key:'date',label:'Created'}];
+function rescheduleFU(fu){ const inp=el('input',{type:'date',value:fu.nextDate||todayISO()});
+  const rem=el('textarea',{rows:2},fu.remark||'');
+  openModal('Reschedule Follow-up',el('div',{},field('New date',inp,{req:true}),field('Remark',rem)),
+    [el('button',{class:'btn sec',onclick:closeModal},'Cancel'),
+     el('button',{class:'btn',onclick:()=>{store.update('followups',fu.id,{nextDate:inp.value,remark:rem.value});toast('Rescheduled','ok');closeModal();route();}},'Save')]);
+}
+
+/* ============================================================================
+   EQUIPMENT
+============================================================================ */
+VIEWS.equipment=function(view){
+  view.append(pageHead('Equipment',store.all('equipment').length+' units',[
+    can('customer.edit')?el('button',{class:'btn',onclick:()=>openEquipForm()},'＋ Add Equipment'):null,
+    exportBtns('Equipment',()=>store.all('equipment'),EQ_COLS)]));
+  const p=el('div',{class:'panel'}); view.append(p); p.append(el('div',{class:'ph'},'All equipment'));
+  p.append(dataTable([
+    {key:'code',label:'ID'},
+    {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+    {key:'type',label:'Type'},{key:'make',label:'Make'},{key:'model',label:'Model'},
+    {key:'serial',label:'Serial'},{key:'floors',label:'Floors'},
+    {key:'newLift',label:'New Lift',render:r=>r.newLift?badge('New','bg-hi'):'—'},
+    {key:'status',label:'Status',render:r=>badge(r.status||'—','bg-ok')},
+    {key:'act',label:'',render:r=>can('customer.edit')?el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();openEquipForm(r);}},'Edit'):''},
+  ],store.all('equipment'),{onRow:r=>location.hash='#c360/'+r.customerId}));
+};
+const EQ_COLS=[{key:'code',label:'Equipment ID'},{key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},
+  {key:'type',label:'Type'},{key:'make',label:'Make'},{key:'model',label:'Model'},{key:'serial',label:'Serial No'},
+  {key:'floors',label:'Floors'},{key:'install',label:'Install Date'},{key:'warrantyEnd',label:'Warranty End'},{key:'status',label:'Status'}];
+function openEquipForm(eq,preCust){ const e=eq||{}; const g=el('div',{class:'form-grid'}); const f={};
+  const add=(k,l,inp,o)=>{f[k]=inp;g.append(field(l,inp,o));};
+  add('customerId','Customer',selectEl(store.all('customers').map(c=>({v:c.id,t:c.name})),e.customerId||preCust,{placeholder:'Select…'}),{req:true});
+  add('type','Equipment Type',selectEl(M().equipmentTypes,e.type,{placeholder:'Select…'}));
+  add('make','Make',el('input',{value:e.make||''}));
+  add('model','Model',el('input',{value:e.model||''}));
+  add('serial','Serial Number',el('input',{value:e.serial||''}));
+  add('floors','Floors / Stops',el('input',{value:e.floors||'',placeholder:'e.g. G+6'}));
+  add('install','Installation Date',el('input',{type:'date',value:e.install||''}));
+  add('warrantyStart','Warranty Start',el('input',{type:'date',value:e.warrantyStart||''}));
+  add('warrantyEnd','Warranty End',el('input',{type:'date',value:e.warrantyEnd||''}));
+  add('status','Status',selectEl(['Operational','Under Repair','Breakdown','Decommissioned'],e.status||'Operational'));
+  add('newLift','New Lift?',selectEl([{v:'',t:'No'},{v:'1',t:'Yes'}],e.newLift?'1':''));
+  add('remarks','Remarks',el('textarea',{rows:2},e.remarks||''),{full:true});
+  const save=el('button',{class:'btn',onclick:()=>{ if(!f.customerId.value){toast('Select a customer','err');return;}
+    const d={};Object.keys(f).forEach(k=>d[k]=f[k].value); d.newLift=!!d.newLift;
+    if(eq)store.update('equipment',eq.id,d); else {d.code=store.code('EQP');store.insert('equipment',d);}
+    toast('Equipment saved','ok');closeModal();route();
+  }},'Save');
+  openModal(eq?'Edit Equipment':'New Equipment',g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save],true);
+}
+
+/* ============================================================================
+   AMC MANAGEMENT
+============================================================================ */
+VIEWS.amc=function(view){
+  view.append(pageHead('AMC Management',store.all('amc').length+' contracts',[
+    can('customer.edit')?el('button',{class:'btn',onclick:()=>openAmcForm()},'＋ Add AMC'):null,
+    el('button',{class:'btn sec',onclick:()=>{const n=runAlertScan();refreshBell();toast(n.length?n.length+' new alert(s)':'No new alerts','ok');route();}},'🔄 Scan'),
+    exportBtns('AMC',()=>filtered(),AMC_COLS)]));
+  const bar=el('div',{class:'panel'}); const pb=el('div',{class:'pb filters'});
+  const stF=selectEl(['Active','Expiring Soon','Expired','Renewed','Cancelled'],'',{placeholder:'All statuses'});
+  const win=selectEl([{v:'7',t:'≤ 7 days'},{v:'30',t:'≤ 30 days'},{v:'90',t:'≤ 90 days'}],'',{placeholder:'Any expiry window'});
+  pb.append(field('Status',stF),field('Expiring within',win));
+  bar.append(pb); view.append(bar);
+  const tp=el('div',{class:'panel'}); view.append(tp);
+  function filtered(){ return store.all('amc').filter(a=>{ if(stF.value&&amcStatus(a)!==stF.value)return false;
+    if(win.value){const d=daysUntil(a.endDate);if(d==null||d<0||d>+win.value)return false;} return true;}); }
+  function draw(){ tp.innerHTML=''; const rows=[...filtered()].sort((a,b)=>(a.endDate||'').localeCompare(b.endDate||''));
+    tp.append(el('div',{class:'ph'},'Contracts ('+rows.length+')'));
+    tp.append(dataTable([
+      {key:'code',label:'AMC ID'},
+      {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+      {key:'equipment',label:'Equipment'},
+      {key:'endDate',label:'Expiry',render:r=>fmtD(r.endDate)},
+      {key:'left',label:'Days left',val:r=>daysUntil(r.endDate),render:r=>{const d=daysUntil(r.endDate);if(d==null)return '—';return d<0?badge(Math.abs(d)+'d ago','bg-crit'):badge(d+'d','bg-'+(d<=7?'hi':d<=30?'warn':'ok'));}},
+      {key:'value',label:'Value',render:r=>r.value?inr(r.value):'—'},
+      {key:'type',label:'Type'},
+      {key:'status',label:'Status',render:r=>amcBadge(r)},
+      {key:'act',label:'Actions',render:r=>amcActions(r)},
+    ],rows,{onRow:r=>location.hash='#c360/'+r.customerId}));
+  }
+  [stF,win].forEach(i=>i.addEventListener('input',draw)); draw();
+};
+const AMC_COLS=[{key:'code',label:'AMC ID'},{key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},
+  {key:'equipment',label:'Equipment'},{key:'serial',label:'Serial'},{key:'startDate',label:'Start'},{key:'endDate',label:'End'},
+  {key:'value',label:'Value'},{key:'type',label:'Type'},{key:'freq',label:'Frequency'},{key:'assigned',label:'Assigned'},
+  {key:'status',label:'Status',val:r=>amcStatus(r)}];
+function amcActions(a){ return el('div',{style:'display:flex;gap:4px;flex-wrap:wrap'},
+  el('button',{class:'btn xs sec',title:'Send Email',onclick:e=>{e.stopPropagation();sendEmail(a);toast('Email drafted','ok');}},'✉'),
+  el('button',{class:'btn xs sec',title:'WhatsApp',onclick:e=>{e.stopPropagation();sendWhatsApp(a);toast('WhatsApp opened','ok');}},'🟢'),
+  el('button',{class:'btn xs sec',title:'Renewal PDF',onclick:e=>{e.stopPropagation();renewalPDF(a);}},'📄'),
+  can('customer.edit')?el('button',{class:'btn xs sec',title:'Edit',onclick:e=>{e.stopPropagation();openAmcForm(a);}},'✎'):'',
+  can('customer.edit')?el('button',{class:'btn xs',title:'Renew',onclick:e=>{e.stopPropagation();renewAmc(a);}},'↻'):'' );
+}
+function openAmcForm(amc,preCust){ const a=amc||{}; const g=el('div',{class:'form-grid'}); const f={};
+  const add=(k,l,inp,o)=>{f[k]=inp;g.append(field(l,inp,o));};
+  add('customerId','Customer',selectEl(store.all('customers').map(c=>({v:c.id,t:c.name})),a.customerId||preCust,{placeholder:'Select…'}),{req:true});
+  const eqSel=el('select',{},el('option',{value:''},'—')); f.equipmentId=eqSel;
+  function fillEq(cid){eqSel.innerHTML='<option value="">—</option>';store.where('equipment',e=>e.customerId===cid).forEach(e=>eqSel.append(el('option',{value:e.id},(e.make||'Elevator')+' '+(e.floors||''))));if(a.equipmentId)eqSel.value=a.equipmentId;}
+  fillEq(a.customerId||preCust); f.customerId.addEventListener('change',()=>fillEq(f.customerId.value));
+  g.append(field('Equipment',eqSel));
+  add('equipment','Equipment Label',el('input',{value:a.equipment||'Passenger Elevator'}));
+  add('serial','Equipment Serial No.',el('input',{value:a.serial||''}));
+  add('startDate','AMC Start Date',el('input',{type:'date',value:a.startDate||''}),{req:true});
+  add('endDate','AMC End Date',el('input',{type:'date',value:a.endDate||''}),{req:true});
+  add('value','AMC Value (₹)',el('input',{type:'number',value:a.value||''}));
+  add('type','AMC Type',selectEl(M().amcTypes,a.type||'Comprehensive'));
+  add('freq','Service Frequency',selectEl(M().serviceFreq,a.freq||'Quarterly'));
+  add('assigned','Assigned Employee',selectEl(store.all('users').map(u=>u.name),a.assigned||session().name));
+  add('manual','Manual Override',selectEl([{v:'',t:'Auto (by dates)'},{v:'Cancelled',t:'Cancelled'}],a.manual||''));
+  add('remarks','Remarks',el('textarea',{rows:2},a.remarks||''),{full:true});
+  const save=el('button',{class:'btn',onclick:()=>{ if(!f.customerId.value||!f.startDate.value||!f.endDate.value){toast('Customer, start & end dates required','err');return;}
+    const d={};Object.keys(f).forEach(k=>d[k]=f[k].value);
+    if(amc)store.update('amc',amc.id,d); else{d.code=store.code('AMC');store.insert('amc',d);}
+    runAlertScan();refreshBell();toast('AMC saved','ok');closeModal();route();
+  }},'Save');
+  openModal(amc?'Edit AMC · '+amc.code:'New AMC Contract',g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save],true);
+}
+function renewAmc(a){ const years=el('input',{type:'number',value:1,min:1,style:'width:80px'});
+  const val=el('input',{type:'number',value:a.value||''});
+  openModal('Renew AMC · '+a.code,el('div',{},
+    el('p',{class:'small'},'Current expiry: '+fmtD(a.endDate)+'. A new term starts the day after expiry.'),
+    field('Extend by (years)',years),field('New AMC value (₹)',val)),
+    [el('button',{class:'btn sec',onclick:closeModal},'Cancel'),
+     el('button',{class:'btn',onclick:()=>{ const newEnd=addDaysISO(a.endDate,365*(+years.value||1));
+       store.update('amc',a.id,{startDate:addDaysISO(a.endDate,1),endDate:newEnd,value:val.value||a.value,
+         manual:'',renewedAt:nowISO(),remarks:(a.remarks||'')+' | Renewed '+todayISO()});
+       // clear old alert ledger so new milestones can fire
+       store.all('alerts').filter(al=>al.amcId===a.id).forEach(al=>store.remove('alerts',al.id));
+       pushNotif({icon:'✅',title:'AMC renewed',body:(store.get('customers',a.customerId)?.name||'')+' → '+fmtD(newEnd),link:'#c360/'+a.customerId});
+       refreshBell();toast('AMC renewed to '+fmtD(newEnd),'ok');closeModal();route();
+     }},'Confirm renewal')]);
+}
+
+/* ============================================================================
+   ALERTS
+============================================================================ */
+VIEWS.alerts=function(view){
+  view.append(pageHead('Alerts','AMC expiry & overdue follow-ups',[
+    el('button',{class:'btn sec',onclick:()=>{const n=runAlertScan();refreshBell();toast(n.length?n.length+' new':'Up to date','ok');route();}},'🔄 Re-scan')]));
+  const amc=store.all('amc').map(a=>({a,sev:amcSeverity(a)})).filter(x=>x.sev);
+  const groups={crit:{t:'🔴 Critical — AMC already expired',items:[]},hi:{t:'🟠 High — expires within 7 days',items:[]},
+    warn:{t:'🟡 Warning — expires within 30 days',items:[]},info:{t:'🔵 Upcoming — expires within 90 days',items:[]}};
+  amc.forEach(x=>groups[x.sev.k].items.push(x));
+  const cg=el('div',{class:'cards'});
+  [['crit','Critical','b-crit'],['hi','High','b-hi'],['warn','Warning','b-warn'],['info','Upcoming','b-info']]
+    .forEach(([k,l,c])=>cg.append(el('div',{class:'stat '+c},el('div',{class:'lbl'},l),el('div',{class:'val'},groups[k].items.length))));
+  view.append(cg);
+  Object.entries(groups).forEach(([k,gp])=>{ if(!gp.items.length)return;
+    const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},gp.t+' ('+gp.items.length+')'));
+    p.append(dataTable([
+      {key:'cust',label:'Customer',render:x=>store.get('customers',x.a.customerId)?.name||'—'},
+      {key:'eq',label:'Equipment',render:x=>x.a.equipment||'—'},
+      {key:'exp',label:'Expiry',render:x=>fmtD(x.a.endDate)},
+      {key:'sev',label:'Status',render:x=>badge(x.sev.txt,'bg-'+x.sev.k)},
+      {key:'act',label:'Notify',render:x=>el('div',{style:'display:flex;gap:4px'},
+        el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();sendEmail(x.a);toast('Email drafted','ok');}},'✉'),
+        el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();sendWhatsApp(x.a);}},'🟢'),
+        el('button',{class:'btn xs sec',onclick:e=>{e.stopPropagation();renewalPDF(x.a);}},'📄'))},
+    ],gp.items.sort((a,b)=>(a.a.endDate||'').localeCompare(b.a.endDate||'')),{onRow:x=>location.hash='#c360/'+x.a.customerId}));
+    view.append(p);
+  });
+  // overdue follow-ups
+  const of=store.all('followups').filter(f=>f.status==='Open'&&f.nextDate&&daysUntil(f.nextDate)<0);
+  if(of.length){ const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'⏰ Overdue follow-ups ('+of.length+')'));
+    p.append(dataTable([
+      {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+      {key:'nextDate',label:'Was due',render:r=>badge('Overdue '+Math.abs(daysUntil(r.nextDate))+'d','bg-crit')},
+      {key:'remark',label:'Remark'},{key:'by',label:'Owner'},
+    ],of,{onRow:r=>location.hash='#c360/'+r.customerId})); view.append(p); }
+  // alert history
+  const hist=[...store.all('alerts')].sort((a,b)=>(b.ts||'').localeCompare(a.ts||'')).slice(0,50);
+  const hp=el('div',{class:'panel'}); hp.append(el('div',{class:'ph'},'Alert history',
+    el('div',{class:'actions'},exportBtns('AlertHistory',()=>store.all('alerts'),
+      [{key:'cust',label:'Customer',val:r=>store.get('customers',r.customerId)?.name||''},{key:'type',label:'Alert Type'},
+       {key:'alertDate',label:'Alert Date'},{key:'method',label:'Method'},{key:'status',label:'Status'},{key:'by',label:'By'}]))));
+  hp.append(dataTable([
+    {key:'cust',label:'Customer',render:r=>store.get('customers',r.customerId)?.name||'—'},
+    {key:'type',label:'Alert Type'},{key:'alertDate',label:'Date',render:r=>fmtD(r.alertDate)},
+    {key:'method',label:'Method'},{key:'status',label:'Status',render:r=>badge(r.status,'bg-info')},{key:'by',label:'By'},
+  ],hist,{empty:'No alerts generated yet — run a scan'})); view.append(hp);
+};
+
+/* ============================================================================
+   CUSTOMER 360
+============================================================================ */
+VIEWS.c360=function(view,id){ const c=store.get('customers',id); if(!c){view.append(el('div',{class:'empty'},'Customer not found'));return;}
+  const head=el('div',{class:'c360-head'},
+    el('div',{style:'display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap'},
+      el('div',{},el('h2',{},c.name),el('div',{class:'small',style:'color:#dce8f6'},c.code+' · '+(c.type||'')),
+        el('div',{class:'meta'},
+          el('span',{},'📞 '+(c.mobile||'—')),el('span',{},'👤 '+(c.contactPerson||'—')),
+          el('span',{},'📍 '+(c.city||c.address||'—')),el('span',{},'🧑‍🔧 '+(c.assigned||'—')))),
+      el('div',{style:'margin-left:auto;display:flex;gap:6px;flex-wrap:wrap'},
+        can('visit.add')?el('button',{class:'btn sec sm',onclick:()=>VIEWS.visitForm(c.id)},'＋ Visit'):null,
+        can('customer.edit')?el('button',{class:'btn sec sm',onclick:()=>openCustomerForm(c)},'✎ Edit'):null,
+        can('customer.edit')?el('button',{class:'btn sec sm',onclick:()=>openEquipForm(null,c.id)},'＋ Equipment'):null,
+        can('customer.edit')?el('button',{class:'btn sec sm',onclick:()=>openAmcForm(null,c.id)},'＋ AMC'):null)));
+  view.append(head);
+  const tabs=['Overview','Visits','Inquiries','Follow-ups','AMC','Equipment','Documents','Communication'];
+  const tb=el('div',{class:'tabbar'}); const panel=el('div',{});
+  let active='Overview';
+  function render(){ tb.innerHTML=''; tabs.forEach(t=>tb.append(el('button',{class:t===active?'active':'',onclick:()=>{active=t;render();}},t)));
+    panel.innerHTML=''; panel.append(tabContent(t=active,c)); }
+  view.append(tb,panel); render();
+};
+function tabContent(tab,c){
+  const wrap=el('div',{});
+  const visits=store.where('visits',v=>v.customerId===c.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const inqs=store.where('inquiries',i=>i.customerId===c.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const fus=store.where('followups',f=>f.customerId===c.id).sort((a,b)=>(b.nextDate||'').localeCompare(a.nextDate||''));
+  const amcs=store.where('amc',a=>a.customerId===c.id);
+  const eqs=store.where('equipment',e=>e.customerId===c.id);
+  const docs=store.where('documents',d=>d.customerId===c.id).sort((a,b)=>(b.ts||'').localeCompare(a.ts||''));
+  if(tab==='Overview'){
+    const p=el('div',{class:'panel'}); p.append(el('div',{class:'ph'},'Customer information'));
+    const b=el('div',{class:'pb two-col'});
+    [['Code',c.code],['Company',c.company],['Contact Person',c.contactPerson],['Mobile',c.mobile],
+     ['Alt Mobile',c.altMobile],['Email',c.email],['Address',c.address],['City',c.city],['State',c.state],
+     ['PIN',c.pin],['Type',c.type],['Segment',c.segment],['Assigned',c.assigned],['Status',c.status],
+     ['Created',fmtD(c.created)],['Last Visit',fmtD(c.lastVisit)]].forEach(([k,v])=>b.append(kv(k,v||'—')));
+    if(c.remarks)b.append(el('div',{class:'kv',style:'grid-column:1/-1'},el('span',{class:'k'},'Remarks'),el('span',{class:'v'},c.remarks)));
+    p.append(b); wrap.append(p);
+    // mini summary
+    const cg=el('div',{class:'cards'});
+    cg.append(mini('Visits',visits.length),mini('Inquiries',inqs.length),mini('AMCs',amcs.length),
+      mini('Equipment',eqs.length),mini('Open F/U',fus.filter(f=>f.status==='Open').length));
+    wrap.append(cg);
+    amcs.forEach(a=>{const sev=amcSeverity(a); if(sev)wrap.append(el('div',{class:'panel',style:'border-left:4px solid var(--'+sev.k+')'},
+      el('div',{class:'pb',style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap'},
+        badge('AMC '+a.code,'bg-brand'),amcBadge(a),el('span',{},'⚠ '+sev.txt+' · expires '+fmtD(a.endDate)),
+        el('div',{style:'margin-left:auto;display:flex;gap:5px'},amcActions(a)))));});
+    return wrap;
+  }
+  if(tab==='Visits')return listPanel('Visit history',dataTable([
+    {key:'date',label:'Date',render:r=>fmtD(r.date)},{key:'purpose',label:'Purpose'},
+    {key:'employee',label:'Engineer'},{key:'status',label:'Status',render:r=>badge(r.status||'—','bg-info')},
+    {key:'requirement',label:'Requirement'},
+    {key:'loc',label:'GPS',render:r=>r.lat?el('a',{href:'https://maps.google.com/?q='+r.lat+','+r.lng,target:'_blank'},'📍'):'—'},
+  ],visits,{empty:'No visits yet'}));
+  if(tab==='Inquiries')return listPanel('Inquiry history',dataTable([
+    {key:'code',label:'ID'},{key:'date',label:'Date',render:r=>fmtD(r.date)},{key:'category',label:'Category'},
+    {key:'description',label:'Requirement'},{key:'value',label:'Value',render:r=>r.value?inr(r.value):'—'},
+    {key:'status',label:'Status',render:r=>stBadge(r.status)},
+    {key:'act',label:'',render:r=>can('inquiry.edit')?el('button',{class:'btn xs sec',onclick:()=>openInquiryForm(r)},'Edit'):''},
+  ],inqs,{empty:'No inquiries'}));
+  if(tab==='Follow-ups')return listPanel('Follow-up history',dataTable([
+    {key:'nextDate',label:'Due',render:r=>fmtD(r.nextDate)},{key:'remark',label:'Remark'},
+    {key:'status',label:'Status',render:r=>stBadge(r.status)},{key:'by',label:'Owner'},{key:'date',label:'Logged',render:r=>fmtD(r.date)},
+  ],fus,{empty:'No follow-ups'}));
+  if(tab==='AMC')return listPanel('AMC history',dataTable([
+    {key:'code',label:'ID'},{key:'equipment',label:'Equipment'},{key:'startDate',label:'Start',render:r=>fmtD(r.startDate)},
+    {key:'endDate',label:'End',render:r=>fmtD(r.endDate)},{key:'value',label:'Value',render:r=>r.value?inr(r.value):'—'},
+    {key:'status',label:'Status',render:r=>amcBadge(r)},{key:'act',label:'Actions',render:r=>amcActions(r)},
+  ],amcs,{empty:'No AMC records'}));
+  if(tab==='Equipment')return listPanel('Equipment history',dataTable([
+    {key:'code',label:'ID'},{key:'type',label:'Type'},{key:'make',label:'Make'},{key:'model',label:'Model'},
+    {key:'serial',label:'Serial'},{key:'floors',label:'Floors'},{key:'status',label:'Status',render:r=>badge(r.status||'—','bg-ok')},
+    {key:'act',label:'',render:r=>can('customer.edit')?el('button',{class:'btn xs sec',onclick:()=>openEquipForm(r)},'Edit'):''},
+  ],eqs,{empty:'No equipment'}));
+  if(tab==='Documents')return listPanel('Documents',dataTable([
+    {key:'kind',label:'Type'},{key:'subject',label:'Subject'},{key:'ts',label:'Date',render:r=>fmtDT(r.ts)},{key:'by',label:'By'},
+  ],docs.filter(d=>d.kind!=='comm'),{empty:'No documents attached'}));
+  if(tab==='Communication')return listPanel('Communication history',dataTable([
+    {key:'method',label:'Channel',render:r=>badge(r.method||'—','bg-brand')},{key:'to',label:'To'},
+    {key:'subject',label:'Subject'},{key:'ts',label:'When',render:r=>fmtDT(r.ts)},{key:'by',label:'By'},
+  ],docs.filter(d=>d.kind==='comm'),{empty:'No messages sent yet'}));
+  return wrap;
+}
+function listPanel(title,node){const p=el('div',{class:'panel'});p.append(el('div',{class:'ph'},title),node);return p;}
+function mini(l,v){return el('div',{class:'stat'},el('div',{class:'lbl'},l),el('div',{class:'val'},v));}
+
+/* ============================================================================
+   REPORTS
+============================================================================ */
+VIEWS.reports=function(view){
+  view.append(pageHead('Reports','Filtered operational & management reports'));
+  const defs=[
+    ['Customer Visit Report','visits',VIS_COLS],
+    ['Daily Inquiry Report','inquiries',INQ_COLS],
+    ['Employee-wise Inquiry Report','inquiries',INQ_COLS],
+    ['Pending Inquiry Report','inquiries',INQ_COLS],
+    ['Follow-up Due Report','followups',FU_COLS],
+    ['AMC Expiry Report','amc',AMC_COLS],
+    ['AMC Overdue Report','amc',AMC_COLS],
+    ['Customer Master Report','customers',CUST_COLS],
+  ];
+  const bar=el('div',{class:'panel'}); const pb=el('div',{class:'pb filters'});
+  const rSel=selectEl(defs.map((d,i)=>({v:i,t:d[0]})),0);
+  const d1=el('input',{type:'date'}),d2=el('input',{type:'date'});
+  const empF=selectEl([...new Set(store.all('users').map(u=>u.name))],'',{placeholder:'All employees'});
+  const stF=el('input',{placeholder:'Status contains…'});
+  pb.append(field('Report',rSel),field('From',d1),field('To',d2),field('Employee',empF),field('Status',stF));
+  bar.append(pb); view.append(bar);
+  const out=el('div',{class:'panel'}); view.append(out);
+  function build(){ const [title,table,cols]=defs[+rSel.value]; let rows=[...store.all(table)];
+    // report-specific base filters
+    if(title==='Pending Inquiry Report')rows=rows.filter(r=>!['Won','Lost','Closed'].includes(r.status));
+    if(title==='Follow-up Due Report')rows=rows.filter(r=>r.status==='Open'&&r.nextDate&&daysUntil(r.nextDate)<=7);
+    if(title==='AMC Expiry Report')rows=rows.filter(r=>{const d=daysUntil(r.endDate);return d!=null&&d>=0&&d<=90;});
+    if(title==='AMC Overdue Report')rows=rows.filter(r=>{const d=daysUntil(r.endDate);return d!=null&&d<0&&r.manual!=='Cancelled';});
+    // generic filters
+    const dateKey=table==='followups'?'nextDate':table==='amc'?'endDate':'date';
+    rows=rows.filter(r=>{ if(d1.value&&(r[dateKey]||'')<d1.value)return false; if(d2.value&&(r[dateKey]||'')>d2.value)return false;
+      if(empF.value&&!(r.employee===empF.value||r.assigned===empF.value||r.by===empF.value))return false;
+      if(stF.value&&!(String(r.status||'').toLowerCase().includes(stF.value.toLowerCase())))return false; return true;});
+    out.innerHTML='';
+    out.append(el('div',{class:'ph'},title+' ('+rows.length+')',el('div',{class:'actions'},
+      exportBtns(title.replace(/\W+/g,'_'),()=>rows,cols),
+      el('button',{class:'btn sm sec',onclick:()=>reportPDF(title,rows,cols)},'⬇ PDF'))));
+    out.append(dataTable(cols.map(c=>({key:c.key,label:c.label,val:c.val,
+      render:r=>{const v=c.val?c.val(r):r[c.key]; if(['date','endDate','startDate','nextDate','created','lastVisit'].includes(c.key))return fmtD(v);return v||'—';}})),
+      rows.slice(0,300),{empty:'No matching records'}));
+  }
+  [rSel,d1,d2,empF,stF].forEach(i=>i.addEventListener('input',build)); build();
+};
+function reportPDF(title,rows,cols){ const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape'});
+  const s=store.settings().company; doc.setFontSize(14);doc.setFont(undefined,'bold');doc.text(s.name,14,14);
+  doc.setFontSize(11);doc.text(title,14,21); doc.setFontSize(8);doc.setFont(undefined,'normal');
+  doc.text('Generated '+fmtDT(nowISO())+'  ·  '+rows.length+' records',14,26);
+  const use=cols.slice(0,7); let y=34; const cw=270/use.length;
+  doc.setFont(undefined,'bold'); use.forEach((c,i)=>doc.text(String(c.label).slice(0,18),14+i*cw,y)); doc.setFont(undefined,'normal');
+  y+=5; doc.setDrawColor(220);doc.line(14,y-3,284,y-3);
+  rows.slice(0,40).forEach(r=>{ use.forEach((c,i)=>{let v=c.val?c.val(r):r[c.key];
+      if(['date','endDate','startDate','nextDate','created'].includes(c.key))v=fmtD(v); doc.text(String(v??'').slice(0,20),14+i*cw,y);});
+    y+=6; if(y>195){doc.addPage();y=20;} });
+  if(rows.length>40)doc.text('… '+(rows.length-40)+' more rows (use Excel export for full data)',14,y+4);
+  doc.save(title.replace(/\W+/g,'_')+'.pdf'); toast('PDF exported','ok');
+}
+
+/* ============================================================================
+   EXCEL IMPORT  (upload → map → validate → dedupe → import → summary)
+============================================================================ */
+VIEWS.import=function(view){
+  if(!(session().role==='admin')){view.append(el('div',{class:'empty'},'Admin only'));return;}
+  view.append(pageHead('Excel Import','Bring your existing sheets into the cloud database — with duplicate detection'));
+  // Built-in dataset loader (the original July-2026 inquiry sheet, 61 records)
+  const bi=el('div',{class:'panel'}); bi.append(el('div',{class:'ph'},'Quick start · built-in July-2026 records'));
+  const bib=el('div',{class:'pb'});
+  bib.append(el('p',{class:'small'},'Load the 61 records from the original July-2026 inquiry sheet straight into Firestore (customers, equipment, visits, inquiries, follow-ups and the 7 known AMC dates). Use this once to get started, then keep adding via Excel upload or the New Visit button.'));
+  bib.append(el('button',{class:'btn',onclick:()=>{
+      if(store.all('customers').length && !confirm('Your database already has '+store.all('customers').length+' customers. Load the built-in records on top of them?')) return;
+      const n=U.loadBuiltinData(); refreshBell(); buildNavSafe();
+      toast(n+' customers loaded from built-in sheet','ok'); route();
+    }},'⬇ Load built-in July-2026 records'));
+  bi.append(bib); view.append(bi);
+
+  const p=el('div',{class:'panel'}); const pb=el('div',{class:'pb'});
+  pb.append(el('p',{class:'small'},'Upload an .xlsx / .csv. You will map each column to a database field, preview, and import only valid, non-duplicate customers.'));
+  const fileInp=el('input',{type:'file',accept:'.xlsx,.xls,.csv'});
+  pb.append(field('Choose file',fileInp));
+  const area=el('div',{}); p.append(el('div',{class:'ph'},'1 · Upload'),pb,area); view.append(p);
+  const FIELDS=[['','— ignore —'],['name','Customer / Site Name'],['company','Company'],['contactPerson','Contact Person'],
+    ['mobile','Mobile'],['email','Email'],['address','Address'],['city','City'],['make','Elevator Make (→equipment)'],
+    ['floors','Floors (→equipment)'],['amc_end','AMC End Date (→AMC)'],['remarks','Remarks / Inquiry (→inquiry)']];
+  fileInp.addEventListener('change',()=>{ const file=fileInp.files[0]; if(!file)return;
+    const rd=new FileReader(); rd.onload=e=>{ let wb; try{wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});}catch(err){toast('Could not read file','err');return;}
+      const ws=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      // find header row = first row with >=3 non-empty cells
+      let hi=json.findIndex(r=>r.filter(x=>String(x).trim()).length>=3); if(hi<0)hi=0;
+      const headers=json[hi].map(h=>String(h).trim()); const dataRows=json.slice(hi+1).filter(r=>r.some(x=>String(x).trim()));
+      renderMap(headers,dataRows);
+    }; rd.readAsBinaryString(file); });
+  function guess(h){ h=h.toLowerCase(); if(/site|customer|name/.test(h))return 'name'; if(/company/.test(h))return 'company';
+    if(/con.?per|person/.test(h))return 'contactPerson'; if(/mobile|contact|phone/.test(h))return 'mobile';
+    if(/mail/.test(h))return 'email'; if(/address/.test(h))return 'address'; if(/city/.test(h))return 'city';
+    if(/make|elevator|brand/.test(h))return 'make'; if(/floor/.test(h))return 'floors';
+    if(/amc|expiry|end|follow/.test(h))return 'amc_end'; if(/remark/.test(h))return 'remarks'; return ''; }
+  function renderMap(headers,rows){ area.innerHTML=''; const mapSel=[];
+    area.append(el('div',{class:'ph',style:'margin-top:10px;border-top:1px solid var(--line)'},'2 · Map columns ('+rows.length+' rows found)'));
+    const mg=el('div',{class:'pb',style:'display:grid;grid-template-columns:1fr 1fr;gap:8px'});
+    headers.forEach((h,idx)=>{ const sel=selectEl(FIELDS.map(f=>({v:f[0],t:f[1]})),guess(h)); mapSel[idx]=sel;
+      mg.append(el('div',{class:'chip',style:'justify-content:space-between'},el('b',{},h||('Col '+(idx+1))),sel)); });
+    area.append(mg);
+    const btn=el('button',{class:'btn',style:'margin:0 16px 16px',onclick:()=>preview(headers,rows,mapSel)},'Preview & validate →');
+    area.append(btn);
+  }
+  function preview(headers,rows,mapSel){ const map={}; mapSel.forEach((s,i)=>{if(s.value)map[s.value]=i;});
+    if(map.name==null){toast('Map at least the Customer Name column','err');return;}
+    const existing=store.all('customers');
+    const parsed=rows.map(r=>{ const o={}; Object.keys(map).forEach(k=>o[k]=String(r[map[k]]??'').trim());
+      // date parse for amc_end
+      if(o.amc_end){const m=o.amc_end.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);if(m){o.amc_end=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}else if(!/^\d{4}-\d{2}-\d{2}/.test(o.amc_end))o.amc_end='';}
+      o._dup=existing.some(c=>c.name.toLowerCase()===(o.name||'').toLowerCase()&&(!o.mobile||c.mobile===o.mobile));
+      o._err=!o.name?'Missing name':''; return o; });
+    const valid=parsed.filter(p=>!p._err&&!p._dup); const dups=parsed.filter(p=>p._dup); const errs=parsed.filter(p=>p._err);
+    const sect=el('div',{}); sect.append(el('div',{class:'ph',style:'border-top:1px solid var(--line)'},'3 · Preview'));
+    const cg=el('div',{class:'cards',style:'padding:0 16px'});
+    cg.append(el('div',{class:'stat b-ok'},el('div',{class:'lbl'},'Will import'),el('div',{class:'val'},valid.length)),
+      el('div',{class:'stat b-warn'},el('div',{class:'lbl'},'Duplicates (skip)'),el('div',{class:'val'},dups.length)),
+      el('div',{class:'stat b-crit'},el('div',{class:'lbl'},'Errors'),el('div',{class:'val'},errs.length)));
+    sect.append(cg);
+    const cols=Object.keys(map).map(k=>({key:k,label:k})); cols.unshift({key:'_flag',label:'Status',render:r=>r._err?badge('Error','bg-crit'):r._dup?badge('Duplicate','bg-warn'):badge('New','bg-ok')});
+    sect.append(dataTable(cols,parsed.slice(0,80),{empty:'Nothing parsed'}));
+    const imp=el('button',{class:'btn',style:'margin:12px 16px',onclick:()=>{
+      let n=0; valid.forEach(o=>{ const cust=store.insert('customers',{code:store.code('CUST'),name:o.name,company:o.company||o.name,
+        contactPerson:o.contactPerson||'',mobile:o.mobile||'',email:o.email||'',address:o.address||'',city:o.city||'',
+        state:'',type:'Society / Apartment',segment:'Elevator',assigned:session().name,status:'Active',
+        remarks:o.remarks||'',created:todayISO(),lastVisit:''});
+        if(o.make||o.floors){const eq=store.insert('equipment',{code:store.code('EQP'),customerId:cust.id,type:'Passenger Elevator',
+          make:o.make||'Not Recorded',model:'',serial:'',floors:o.floors||'',newLift:false,status:'Operational',remarks:''});
+          if(o.amc_end)store.insert('amc',{code:store.code('AMC'),customerId:cust.id,equipmentId:eq.id,equipment:'Passenger Elevator',
+            serial:'',startDate:addDaysISO(o.amc_end,-365),endDate:o.amc_end,value:'',type:'Comprehensive',freq:'Quarterly',
+            assigned:session().name,manual:'',remarks:'Imported'});}
+        if(o.remarks)store.insert('inquiries',{code:store.code('INQ'),customerId:cust.id,visitId:'',date:todayISO(),
+          product:'',category:'AMC',description:o.remarks,value:'',quotationReq:'No',status:'New',priority:'Medium',
+          assigned:session().name,nextFollowup:o.amc_end||'',remarks:'',createdBy:session().name});
+        n++; });
+      runAlertScan();refreshBell();buildNavSafe();
+      toast(n+' customers imported','ok');
+      sect.append(el('div',{class:'pb'},el('div',{class:'stat b-ok',style:'max-width:340px'},
+        el('div',{class:'lbl'},'Import summary'),el('div',{},n+' imported · '+dups.length+' duplicates skipped · '+errs.length+' errors'))));
+      imp.disabled=true;
+    }},'✓ Import '+valid.length+' valid records');
+    sect.append(imp); area.querySelectorAll('.import-preview').forEach(x=>x.remove()); sect.className='import-preview'; area.append(sect);
+  }
+};
+
+/* ============================================================================
+   SETTINGS
+============================================================================ */
+VIEWS.settings=function(view){
+  if(session().role!=='admin'){view.append(el('div',{class:'empty'},'Admin only'));return;}
+  const s=JSON.parse(JSON.stringify(store.settings()));
+  view.append(pageHead('Settings','Alert periods · templates · master data · company'));
+  // Company
+  const cp=el('div',{class:'panel'}); cp.append(el('div',{class:'ph'},'Company information'));
+  const cg=el('div',{class:'pb form-grid'}); const cf={};
+  [['name','Company Name'],['person','Contact Person'],['phone','Phone'],['email','Email'],['address','Address'],['website','Website']]
+    .forEach(([k,l])=>{const i=el('input',{value:s.company[k]||''});cf[k]=i;cg.append(field(l,i));});
+  cp.append(cg); view.append(cp);
+  // Alert periods
+  const ap=el('div',{class:'panel'}); ap.append(el('div',{class:'ph'},'AMC alert periods (days before expiry)'));
+  const apb=el('div',{class:'pb'}); const periodChips=el('div',{class:'chips'}); let periods=[...s.alertPeriods];
+  function drawChips(){periodChips.innerHTML=''; periods.sort((a,b)=>b-a).forEach(d=>periodChips.append(
+    el('span',{class:'chip'},el('b',{},d===0?'On expiry':d+'d'),el('span',{class:'rm',onclick:()=>{periods=periods.filter(x=>x!==d);drawChips();}},'×'))));}
+  drawChips();
+  const newP=el('input',{type:'number',placeholder:'e.g. 45',style:'width:110px'});
+  apb.append(periodChips,el('div',{style:'margin-top:10px;display:flex;gap:8px;align-items:center'},newP,
+    el('button',{class:'btn sm sec',onclick:()=>{const v=+newP.value;if(v>=0&&!periods.includes(v)){periods.push(v);drawChips();newP.value='';}}},'Add milestone')));
+  const overChk=el('input',{type:'checkbox',checked:s.alertOverdue});
+  apb.append(el('label',{style:'display:flex;gap:8px;align-items:center;margin-top:12px'},overChk,'Also generate an overdue alert after expiry'));
+  const timeout=el('input',{type:'number',value:s.sessionTimeoutMin,style:'width:110px'});
+  apb.append(el('div',{style:'margin-top:12px'},field('Auto-logout after (minutes)',timeout)));
+  ap.append(apb); view.append(ap);
+  // Master data
+  const mp=el('div',{class:'panel'}); mp.append(el('div',{class:'ph'},'Master data (comma-separated)'));
+  const mgb=el('div',{class:'pb form-grid'}); const mf={};
+  Object.entries(s.masters).forEach(([k,arr])=>{const t=el('textarea',{rows:2},arr.join(', '));mf[k]=t;
+    mgb.append(field(k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase()),t,{full:k==='inquiryStatuses'}));});
+  mp.append(mgb); view.append(mp);
+  // Templates
+  const tp=el('div',{class:'panel'}); tp.append(el('div',{class:'ph'},'Notification templates',
+    el('div',{class:'actions'},el('span',{class:'small'},'Placeholders: {{person}} {{customer}} {{equipment}} {{make}} {{serial}} {{expiry}} {{value}} {{company}} {{companyPhone}}'))));
+  const tgb=el('div',{class:'pb'}); const tf={};
+  [['emailSubject','Email subject',1],['email','Email body',9],['whatsapp','WhatsApp message',6],['letter','Renewal letter',10]]
+    .forEach(([k,l,rows])=>{const t=el('textarea',{rows},s.templates[k]);tf[k]=t;tgb.append(field(l,t,{full:true}));});
+  tp.append(tgb); view.append(tp);
+  // Save
+  const saveBar=el('div',{style:'display:flex;gap:8px;margin-bottom:30px'});
+  saveBar.append(el('button',{class:'btn',onclick:()=>{
+    Object.keys(cf).forEach(k=>s.company[k]=cf[k].value);
+    s.alertPeriods=periods; s.alertOverdue=overChk.checked; s.sessionTimeoutMin=+timeout.value||30;
+    Object.keys(mf).forEach(k=>s.masters[k]=mf[k].value.split(',').map(x=>x.trim()).filter(Boolean));
+    Object.keys(tf).forEach(k=>s.templates[k]=tf[k].value);
+    store.saveSettings(s); runAlertScan(); refreshBell(); toast('Settings saved','ok');
+  }},'💾 Save all settings'),
+    el('button',{class:'btn sec',onclick:()=>{const blob=new Blob([store.export()],{type:'application/json'});
+      const a=el('a',{href:URL.createObjectURL(blob),download:'shakti_elevator_backup_'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();toast('Backup exported','ok');}},'⬇ Backup (JSON)'),
+    el('button',{class:'btn sec',onclick:()=>location.reload()},'🔄 Reload from cloud'));
+  view.append(saveBar);
+};
+
+/* ============================================================================
+   USERS
+============================================================================ */
+VIEWS.users=function(view){
+  if(session().role!=='admin'){view.append(el('div',{class:'empty'},'Admin only'));return;}
+  const me=session();
+  const admins=()=>store.all('users').filter(u=>u.role==='admin'&&(u.status||'Active')==='Active');
+  view.append(pageHead('Users & Roles',store.all('users').length+' accounts',[
+    el('button',{class:'btn',onclick:()=>openUserForm()},'＋ Add User')]));
+  const p=el('div',{class:'panel'}); view.append(p); p.append(el('div',{class:'ph'},'Accounts'));
+  p.append(dataTable([
+    {key:'name',label:'Name',render:r=>el('b',{},r.name||'—')},
+    {key:'email',label:'Email'},
+    {key:'role',label:'Role',render:r=>badge(ROLES[r.role]||r.role,'bg-brand')},
+    {key:'status',label:'Status',render:r=>(r.status||'Active')==='Active'?badge('Active','bg-ok'):badge('Disabled','bg-mut')},
+    {key:'act',label:'',render:r=>{ const self=r.id===me.id; const row=el('div',{style:'display:flex;gap:5px;flex-wrap:wrap'});
+      row.append(el('button',{class:'btn xs sec',onclick:()=>openUserForm(r)},'Edit'));
+      row.append(el('button',{class:'btn xs sec',onclick:()=>U.sendReset(r.email)},'Reset pwd'));
+      // enable / disable (not on yourself; keep at least one active admin)
+      if(!self){ const active=(r.status||'Active')==='Active';
+        if(active && !(r.role==='admin'&&admins().length<=1))
+          row.append(el('button',{class:'btn xs sec',onclick:()=>{store.update('users',r.id,{status:'Disabled'});toast(r.name+' disabled','ok');route();}},'Disable'));
+        else if(!active)
+          row.append(el('button',{class:'btn xs sec',onclick:()=>{store.update('users',r.id,{status:'Active'});toast(r.name+' enabled','ok');route();}},'Enable'));
+      }
+      // remove access profile (not on yourself; never the last admin)
+      if(!self && !(r.role==='admin'&&admins().length<=1))
+        row.append(el('button',{class:'btn xs danger',onclick:()=>{
+          if(confirm('Remove access for '+r.name+'?\n\nThis deletes their profile so they can no longer sign in. Their login credential itself is removed from Firebase Authentication in the Firebase console.')){
+            store.remove('users',r.id); toast('Access removed','ok'); route(); }}},'Remove'));
+      return row; }},
+  ],store.all('users')));
+  view.append(el('p',{class:'small',style:'margin:-6px 4px 14px;color:var(--muted)'},
+    'New users receive a login immediately. "Reset pwd" emails them a reset link. "Disable" blocks sign-in while keeping the account. "Remove" deletes their access profile — to fully delete the login credential, also remove them under Authentication in the Firebase console.'));
+  // audit log
+  const ap=el('div',{class:'panel'}); ap.append(el('div',{class:'ph'},'Audit trail',
+    el('div',{class:'actions'},exportBtns('AuditTrail',()=>store.all('audit'),
+      [{key:'ts',label:'Timestamp'},{key:'user',label:'User'},{key:'action',label:'Action'},{key:'entity',label:'Entity'},{key:'detail',label:'Detail'}]))));
+  const aud=[...store.all('audit')].sort((a,b)=>(b.ts||'').localeCompare(a.ts||'')).slice(0,80);
+  ap.append(dataTable([
+    {key:'ts',label:'When',render:r=>fmtDT(r.ts)},{key:'user',label:'User'},
+    {key:'action',label:'Action',render:r=>badge(r.action,r.action==='DELETE'?'bg-crit':r.action==='CREATE'?'bg-ok':'bg-info')},
+    {key:'entity',label:'Entity'},{key:'detail',label:'Detail'},
+  ],aud,{empty:'No activity yet'})); view.append(ap);
+};
+async function openUserForm(u){ const g=el('div',{class:'form-grid'}); const f={}; const isNew=!u;
+  f.name=el('input',{value:u?.name||''});
+  f.email=el('input',{type:'email',value:u?.email||'',...(u?{disabled:true}:{})});
+  f.role=selectEl(Object.entries(ROLES).map(([v,t])=>({v,t})),u?.role||'engineer');
+  f.pass=isNew?el('input',{type:'text',placeholder:'At least 6 characters'}):null;
+  f.status=selectEl([{v:'Active',t:'Active'},{v:'Disabled',t:'Disabled'}],u?.status||'Active');
+  g.append(field('Full Name',f.name,{req:true}),field('Email',f.email,{req:true}),field('Role',f.role,{req:true}));
+  if(isNew) g.append(field('Password',f.pass,{req:true}));
+  g.append(field('Status',f.status));
+  const save=el('button',{class:'btn',onclick:async()=>{
+    if(!f.name.value.trim()){toast('Name required','err');return;}
+    if(isNew){
+      if(!f.email.value.trim()){toast('Email required','err');return;}
+      if(!f.pass.value||f.pass.value.length<6){toast('Password must be at least 6 characters','err');return;}
+      save.disabled=true; save.textContent='Creating…';
+      try{ await U.adminCreateUser({name:f.name.value.trim(),email:f.email.value,pass:f.pass.value,role:f.role.value});
+        toast('User created','ok'); closeModal(); route(); }
+      catch(e){ save.disabled=false; save.textContent='Save'; toast(e.message||'Could not create user','err'); }
+    } else {
+      store.update('users',u.id,{name:f.name.value.trim(),role:f.role.value,status:f.status.value});
+      toast('User updated','ok'); closeModal(); route();
+    }
+  }},'Save');
+  openModal(isNew?'New User':'Edit User',g,[el('button',{class:'btn sec',onclick:closeModal},'Cancel'),save]);
+  if(isNew) openModalNote(g,'The new user can sign in right away with this email and password. Ask them to change it after first login via "Forgot password?".');
+}
+function openModalNote(container,text){ container.append(el('p',{class:'small',style:'grid-column:1/-1;color:var(--muted);margin-top:4px'},text)); }
+
+})();
+
+</script>
+</body>
+</html>
